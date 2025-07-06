@@ -1,0 +1,749 @@
+<!--Aime Serge Tuyishime
+CST-310
+Project Title:
+Your Surrounding World
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Office Break Room</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #1020;
+            font-family: Arial, sans-serif;
+        }
+
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(95, 55, 55, 0.7);
+            padding: 15px;
+            border-radius: 5px;
+            z-index: 100;
+        }
+
+        button {
+            margin: 5px;
+            padding: 8px 12px;
+            background: #333;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #555;
+        }
+
+        .active {
+            background: #0066cc !important;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <div>Camera Views:</div>
+        <button id="cam1" class="active">View 1</button>
+        <button id="cam2">View 2</button>
+        <button id="cam3">View 3</button>
+        <div style="margin-top: 10px; font-size: 12px;">
+            Mouse: Rotate | Scroll: Zoom
+        </div>
+    </div>
+
+    <script>
+        // Scene setup
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xffffff);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(10, 10, 9);
+        directionalLight.castShadow = true;
+        directionalLight.shadow.mapSize.width = 2048;
+        directionalLight.shadow.mapSize.height = 2048;
+        scene.add(directionalLight);
+
+        // Materials
+        const floorMaterial       = new THREE.MeshLambertMaterial({ color: 0xE6C9A8 });
+        const sidefloorMaterial   = new THREE.MeshLambertMaterial({ color: 0xffffff });
+        const wallMaterial        = new THREE.MeshLambertMaterial({ color: 0xffffff });
+        const wainscotMaterial    = new THREE.MeshLambertMaterial({ color: 0xE6C9A8 });
+        const tableMaterial       = new THREE.MeshLambertMaterial({ color: 0xD2B48C });
+        const chairSeatMaterial   = new THREE.MeshLambertMaterial({ color: 0xEE82EE });
+        const chairLegMaterial    = new THREE.MeshLambertMaterial({ color: 0x666666 });
+        const lightMaterial       = new THREE.MeshBasicMaterial({ color: 0xffffcc });
+        const armchairMaterial    = new THREE.MeshLambertMaterial({ color: 0x8b4513 });
+
+        // Parameters for main floor
+        const tileSize        = 1.5;
+        const tileHeight      = 0.05;
+        const floorWidth      = 30;
+        const floorDepth      = 15;
+        const rows            = Math.floor(floorDepth / tileSize);
+        const cols            = Math.floor(floorWidth / tileSize);
+
+        const lightGrayMaterial = new THREE.MeshLambertMaterial({ color: 0xcccccc });
+        const darkGrayMaterial  = new THREE.MeshLambertMaterial({ color: 0x444444 });
+
+        for (let row = 0; row < rows; row++) {
+            for (let col = 0; col < cols; col++) {
+                const isLight = (row + col) % 2 === 0;
+                const material = isLight ? lightGrayMaterial : darkGrayMaterial;
+
+                const tile = new THREE.Mesh(
+                    new THREE.BoxGeometry(tileSize, tileHeight, tileSize),
+                    material
+                );
+
+                tile.position.set(
+                    col * tileSize - floorWidth / 2 + tileSize / 2,
+                    tileHeight / 2,
+                    row * tileSize - floorDepth / 2 + tileSize / 2
+                );
+
+                tile.receiveShadow = true;
+                scene.add(tile);
+            }
+        }
+
+        // Main floor lines
+        {
+            const mainFloorLineMaterial = new THREE.MeshLambertMaterial({ color: 0x3a3a3a });
+            const mainFloorLineThickness = 0.01;
+            const mainFloorLineHeight = 0.001;
+            const mainFloorLineSpacing = 0.02;
+            const mainFloorLineCount = Math.floor(floorDepth / mainFloorLineSpacing);
+
+            for (let i = 0; i < mainFloorLineCount; i++) {
+                const zOffset = -floorDepth / 2 + i * mainFloorLineSpacing;
+                const line = new THREE.Mesh(
+                    new THREE.BoxGeometry(floorWidth, mainFloorLineHeight, mainFloorLineThickness),
+                    mainFloorLineMaterial
+                );
+                line.position.set(0, tileHeight + 0.001, zOffset);
+                scene.add(line);
+            }
+        }
+
+        // Side floor
+        {
+            const sideTileSize   = 1.5;
+            const sideTileHeight = -0.01;
+            const sideFloorWidth = 30;
+            const sideFloorDepth = 5;
+            const sideRows       = Math.floor(sideFloorDepth / sideTileSize);
+            const sideCols       = Math.floor(sideFloorWidth / sideTileSize);
+
+            const lightBrownMaterial = new THREE.MeshLambertMaterial({ color: 0xD2B48C });
+            const darkBrownMaterial  = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+
+            for (let row = 0; row < sideRows; row++) {
+                for (let col = 0; col < sideCols; col++) {
+                    const isLight = (row + col) % 2 === 0;
+                    const material = isLight ? lightBrownMaterial : darkBrownMaterial;
+
+                    const tile = new THREE.Mesh(
+                        new THREE.BoxGeometry(sideTileSize, tileHeight, sideTileSize),
+                        material
+                    );
+
+                    tile.position.set(
+                        col * sideTileSize - sideCols * sideTileSize / 2 + sideTileSize / 2,
+                        sideTileHeight / 2 + 0.06,
+                        row * sideTileSize - sideRows * sideTileSize / 2 - 4.5
+                    );
+
+                    tile.receiveShadow = true;
+                    scene.add(tile);
+                }
+            }
+
+            const floorLineMaterial = new THREE.MeshLambertMaterial({ color: 0x3a3a3a });
+            const floorLineThickness = 0.01;
+            const floorLineHeight    = 0.001;
+            const floorLineSpacing   = 0.02;
+            const floorLineCount     = Math.floor(sideFloorDepth / floorLineSpacing);
+
+            for (let i = 0; i < floorLineCount; i++) {
+                const zOffset = -sideFloorDepth / 2 + i * floorLineSpacing;
+                const floorLine = new THREE.Mesh(
+                    new THREE.BoxGeometry(sideFloorWidth, floorLineHeight, floorLineThickness),
+                    floorLineMaterial
+                );
+                floorLine.position.set(0, 0.08, zOffset - 5);
+                scene.add(floorLine);
+            }
+        }
+
+        // Back Wall
+        {
+            const backWallGeometry = new THREE.PlaneGeometry(30, 15);
+            const backWall = new THREE.Mesh(backWallGeometry, wallMaterial);
+            backWall.position.set(0, 7.5, -7.5);
+            scene.add(backWall);
+        }
+
+        // Left Wall (brick pattern)
+        {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = '#b22222';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const brickHeight = 40;
+            const brickWidth  = 80;
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+
+            for (let y = 0; y < canvas.height; y += brickHeight) {
+                const offset = (y / brickHeight) % 2 === 0 ? 0 : brickWidth / 2;
+                for (let x = 0; x < canvas.width; x += brickWidth) {
+                    ctx.strokeRect(x + offset, y, brickWidth, brickHeight);
+                }
+            }
+
+            const brickTexture = new THREE.CanvasTexture(canvas);
+            brickTexture.wrapS = THREE.RepeatWrapping;
+            brickTexture.wrapT = THREE.RepeatWrapping;
+            brickTexture.repeat.set(1, 1);
+
+            const brickMaterial = new THREE.MeshLambertMaterial({ map: brickTexture });
+            const leftWallGeometry = new THREE.PlaneGeometry(15, 15);
+            const leftWall = new THREE.Mesh(leftWallGeometry, brickMaterial);
+            leftWall.position.set(15, 7.5, 0);
+            leftWall.rotation.y = -Math.PI / 2;
+            scene.add(leftWall);
+        }
+
+        // Wainscot
+        {
+            const wainscotGeometry = new THREE.PlaneGeometry(30, 3);
+            const wainscot = new THREE.Mesh(wainscotGeometry, wainscotMaterial);
+            wainscot.position.set(0, 1.5, -7.4);
+            scene.add(wainscot);
+
+            const lineMaterial = new THREE.MeshLambertMaterial({ color: 0xaaaaaa });
+            const lineThickness = 0.03;
+            const lineLength    = 30;
+            const lineSpacing   = 0.04;
+            const numberOfLines = Math.floor(3 / lineSpacing);
+
+            for (let i = 0; i < numberOfLines; i++) {
+                const yOffset = -1.5 + i * lineSpacing;
+                const line = new THREE.Mesh(
+                    new THREE.BoxGeometry(lineLength, lineThickness, 0.001),
+                    lineMaterial
+                );
+                line.position.set(0, 3 - 1.5 + yOffset, -7.39);
+                scene.add(line);
+            }
+        }
+
+        // Trash Can
+        function createTrashCan(x, z, rotationY = 0) {
+            const group = new THREE.Group();
+
+            const topWidth    = 1.2;
+            const bottomWidth = 1;
+            const depth       = 1;
+            const height      = 2.5;
+
+            const geometry = new THREE.BufferGeometry();
+            const vertices = new Float32Array([
+                -bottomWidth/2, 0, -depth/2,
+                 bottomWidth/2, 0, -depth/2,
+                 bottomWidth/2, 0,  depth/2,
+                -bottomWidth/2, 0,  depth/2,
+                -topWidth/2,    height, -depth/2,
+                 topWidth/2,    height, -depth/2,
+                 topWidth/2,    height,  depth/2,
+                -topWidth/2,    height,  depth/2,
+            ]);
+
+            const indices = [
+                0,1,5, 0,5,4,
+                1,2,6, 1,6,5,
+                2,3,7, 2,7,6,
+                3,0,4, 3,4,7,
+                4,5,6, 4,6,7,
+                0,2,1, 0,3,2,
+            ];
+
+            geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+            geometry.setIndex(indices);
+            geometry.computeVertexNormals();
+
+            const body = new THREE.Mesh(
+                geometry,
+                new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.2, roughness: 0.6 })
+            );
+            body.castShadow = true;
+            group.add(body);
+
+            const lid = new THREE.Mesh(
+                new THREE.BoxGeometry(topWidth + 0.1, 0.1, depth + 0.1),
+                new THREE.MeshStandardMaterial({ color: 0x222222 })
+            );
+            lid.position.y = height + 0.05;
+            group.add(lid);
+
+            const handle = new THREE.Mesh(
+                new THREE.BoxGeometry(0.4, 0.05, 0.1),
+                new THREE.MeshStandardMaterial({ color: 0x333333 })
+            );
+            handle.position.set(0, height + 0.12, 0);
+            group.add(handle);
+
+            const ridgeMaterial = new THREE.MeshStandardMaterial({ color: 0x2b2b2b });
+            const ridgeGeometry = new THREE.BoxGeometry(0.03, 2, 0.01);
+            const ridgePositions = [-0.4, -0.15, 0.15, 0.4];
+            ridgePositions.forEach(xOffset => {
+                const ridge = new THREE.Mesh(ridgeGeometry, ridgeMaterial);
+                ridge.position.set(xOffset, height / 2, depth / 2 + 0.01);
+                group.add(ridge);
+            });
+
+            group.position.set(x, 0.1, z);
+            group.rotation.y = rotationY;
+            return group;
+        }
+
+        function createTrash(x, z, rotationY = 0) {
+            return createTrashCan(x, z, rotationY);
+        }
+
+        // Table
+        function createTable(x, z) {
+            const group = new THREE.Group();
+
+            const topGeometry = new THREE.BoxGeometry(2.4, 0.1, 2.4);
+            const top = new THREE.Mesh(topGeometry, tableMaterial);
+            top.position.y = 3.5;
+            top.castShadow = true;
+            group.add(top);
+
+            const legGeometry = new THREE.CylinderGeometry(0.1, 0.1, 3.5, 16);
+            const leg = new THREE.Mesh(legGeometry, chairLegMaterial);
+            leg.position.y = 3.5 / 2;
+            leg.castShadow = true;
+            group.add(leg);
+
+            const baseMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
+            const footGroup = new THREE.Group();
+
+            const centerHeight = 0.2;
+            const centerRadius = 0.08;
+            const center = new THREE.Mesh(
+                new THREE.CylinderGeometry(centerRadius, centerRadius, centerHeight, 16),
+                baseMaterial
+            );
+            center.position.y = centerHeight / 2;
+            footGroup.add(center);
+
+            const armLength = 1;
+            const armRadius = 0.05;
+            const padRadius = 0.1;
+            const padHeight = 0.07;
+
+            for (let i = 0; i < 4; i++) {
+                const angle = i * (2 * Math.PI / 4);
+                const arm = new THREE.Mesh(
+                    new THREE.CylinderGeometry(armRadius, armRadius, armLength, 8),
+                    baseMaterial
+                );
+                arm.rotation.z = Math.PI / 2;
+                arm.position.x = Math.cos(angle) * (armLength / 2);
+                arm.position.z = Math.sin(angle) * (armLength / 2);
+                arm.rotation.y = angle;
+                arm.position.y = 0.1;
+                footGroup.add(arm);
+
+                const pad = new THREE.Mesh(
+                    new THREE.CylinderGeometry(padRadius, padRadius, padHeight, 16),
+                    baseMaterial
+                );
+                pad.position.set(
+                    Math.cos(angle) * armLength,
+                    padHeight / 2,
+                    Math.sin(angle) * armLength
+                );
+                pad.castShadow = true;
+                footGroup.add(pad);
+            }
+
+            footGroup.position.set(0, 0, 0);
+            group.add(footGroup);
+
+            group.position.set(x, 0, z);
+            return group;
+        }
+
+        // Long Chair
+        function createLongChair(x, z, rotation = 0) {
+            const group = new THREE.Group();
+
+            const seatGeometry = new THREE.BoxGeometry(1.0, 0.12, 1.0);
+            const seat = new THREE.Mesh(seatGeometry, chairSeatMaterial);
+            seat.position.y = 2.5;
+            seat.scale.set(1, 1, 0.95);
+            seat.castShadow = true;
+            group.add(seat);
+
+            const backGeometry = new THREE.BoxGeometry(1.0, 1.2, 0.1);
+            const back = new THREE.Mesh(backGeometry, chairSeatMaterial);
+            back.position.set(0, 3.3, -0.45);
+            back.scale.set(0.95, 1, 1);
+            back.castShadow = true;
+            group.add(back);
+
+            for (let i = 0; i < 4; i++) {
+                const legGeometry = new THREE.CylinderGeometry(0.04, 0.04, 2.5);
+                const leg = new THREE.Mesh(legGeometry, chairLegMaterial);
+                const x_offset = i % 2 === 0 ? -0.4 : 0.4;
+                const z_offset = i < 2 ? -0.4 : 0.4;
+                leg.position.set(x_offset, 1.25, z_offset);
+                leg.castShadow = true;
+                group.add(leg);
+            }
+
+            const footrestGeometry = new THREE.CylinderGeometry(0.02, 0.02, 0.8);
+            const frontFootrest = new THREE.Mesh(footrestGeometry, chairLegMaterial);
+            frontFootrest.position.set(0, 0.8, 0.4);
+            frontFootrest.rotation.z = Math.PI / 2;
+            group.add(frontFootrest);
+
+            const backFootrest = new THREE.Mesh(footrestGeometry, chairLegMaterial);
+            backFootrest.position.set(0, 0.8, -0.4);
+            backFootrest.rotation.z = Math.PI / 2;
+            group.add(backFootrest);
+
+            const leftFootrest = new THREE.Mesh(footrestGeometry, chairLegMaterial);
+            leftFootrest.position.set(-0.4, 0.8, 0);
+            leftFootrest.rotation.x = Math.PI / 2;
+            group.add(leftFootrest);
+
+            const rightFootrest = new THREE.Mesh(footrestGeometry, chairLegMaterial);
+            rightFootrest.position.set(0.4, 0.8, 0);
+            rightFootrest.rotation.x = Math.PI / 2;
+            group.add(rightFootrest);
+
+            group.position.set(x, 0, z);
+            group.rotation.y = rotation;
+            return group;
+        }
+
+        // Armchair
+        function createArmchair(x, z, rotation = 0) {
+            const group = new THREE.Group();
+
+            const seatGeometry = new THREE.BoxGeometry(1.8, 0.9, 1.6);
+            const seat = new THREE.Mesh(seatGeometry, armchairMaterial);
+            seat.position.y = 0.7;
+            seat.castShadow = true;
+            group.add(seat);
+
+            const backGeometry = new THREE.BoxGeometry(1.8, 1.5, 0.3);
+            const back = new THREE.Mesh(backGeometry, armchairMaterial);
+            back.position.set(0, 1.9, -0.65);
+            back.castShadow = true;
+            group.add(back);
+
+            const armGeometry = new THREE.BoxGeometry(0.3, 1.2, 1.6);
+            const leftArm = new THREE.Mesh(armGeometry, armchairMaterial);
+            leftArm.position.set(-0.75, 1.3, 0);
+            leftArm.castShadow = true;
+            group.add(leftArm);
+
+            const rightArm = new THREE.Mesh(armGeometry, armchairMaterial);
+            rightArm.position.set(0.75, 1.3, 0);
+            rightArm.castShadow = true;
+            group.add(rightArm);
+
+            for (let i = 0; i < 4; i++) {
+                const legGeometry = new THREE.BoxGeometry(0.2, 0.3, 0.2);
+                const leg = new THREE.Mesh(legGeometry, chairLegMaterial);
+                const x_offset = i % 2 === 0 ? -0.6 : 0.6;
+                const z_offset = i < 2 ? -0.6 : 0.6;
+                leg.position.set(x_offset, 0.15, z_offset);
+                leg.castShadow = true;
+                group.add(leg);
+            }
+
+            group.position.set(x, 0, z);
+            group.rotation.y = rotation;
+            return group;
+        }
+
+        // Pendant Light
+        function createPendantLight(x, z) {
+            const group = new THREE.Group();
+
+            const shadeGeometry = new THREE.CylinderGeometry(0.3, 0.3, 1.2, 24, 1, false);
+            const shade = new THREE.Mesh(shadeGeometry, lightMaterial);
+            shade.position.y = 8;
+            group.add(shade);
+
+            const radius = 0.31;
+            const height = 1.2;
+            const squareRows = 8;
+            const squareCols = 16;
+            const lineMaterial = new THREE.LineBasicMaterial({ color: 0x444444 });
+            const lineGroup = new THREE.Group();
+
+            for (let j = 0; j <= squareRows; j++) {
+                const ringGeometry = new THREE.BufferGeometry();
+                const ringPoints = [];
+
+                for (let i = 0; i <= squareCols; i++) {
+                    const angle = (i / squareCols) * Math.PI * 2;
+                    ringPoints.push(new THREE.Vector3(
+                        Math.cos(angle) * radius,
+                        8 - height / 2 + (j / squareRows) * height,
+                        Math.sin(angle) * radius
+                    ));
+                }
+
+                ringGeometry.setFromPoints(ringPoints);
+                lineGroup.add(new THREE.Line(ringGeometry, lineMaterial));
+            }
+
+            for (let i = 0; i < squareCols; i++) {
+                const angle = (i / squareCols) * Math.PI * 2;
+                const xPos = Math.cos(angle) * radius;
+                const zPos = Math.sin(angle) * radius;
+                const lineGeometry = new THREE.BufferGeometry().setFromPoints([
+                    new THREE.Vector3(xPos, 8 - height / 2, zPos),
+                    new THREE.Vector3(xPos, 8 + height / 2, zPos)
+                ]);
+                lineGroup.add(new THREE.Line(lineGeometry, lineMaterial));
+            }
+
+            group.add(lineGroup);
+
+            const cord = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.01, 0.01, 2),
+                new THREE.MeshBasicMaterial({ color: 0x333333 })
+            );
+            cord.position.y = 9.5;
+            group.add(cord);
+
+            const pointLight = new THREE.PointLight(0xffffcc, 0.6, 10);
+            pointLight.position.set(x, 8, z);
+            pointLight.castShadow = true;
+            scene.add(pointLight);
+
+            group.position.set(x, 0, z);
+            return group;
+        }
+
+        // Vertical Grey Cuboid
+        function createVerticalGreyCuboid(x, y, z, width = 1, height = 15, depth = 1) {
+            const geometry = new THREE.BoxGeometry(width, height, depth);
+            const material = new THREE.MeshLambertMaterial({ color: 0x808080 });
+            const cuboid = new THREE.Mesh(geometry, material);
+            cuboid.position.set(x, y + height / 2, z);
+            cuboid.castShadow = true;
+            scene.add(cuboid);
+            return cuboid;
+        }
+
+        // Roof with Lines
+        function createRoofWithRotatedLines(x, y, z, rotationAngle = 0) {
+            const group = new THREE.Group();
+
+            const roofWidth  = 30;
+            const roofDepth  = 6;
+            const roofHeight = 1;
+            const roof = new THREE.Mesh(
+                new THREE.BoxGeometry(roofWidth, roofHeight, roofDepth),
+                new THREE.MeshLambertMaterial({ color: 0xffffff })
+            );
+            roof.position.set(x, y, z);
+            group.add(roof);
+
+            const lineMaterial = new THREE.MeshLambertMaterial({ color: 0x999999 });
+            const lineThickness = 0.05;
+            const lineHeight    = 0.01;
+            const lineSpacing   = 1.5;
+            const alongZ = Math.abs(Math.cos(rotationAngle)) > 0.5;
+            const lineLength = alongZ ? roofWidth : roofDepth;
+            const numLines   = Math.floor((alongZ ? roofDepth : roofWidth) / lineSpacing);
+
+            for (let i = 0; i < numLines; i++) {
+                const line = new THREE.Mesh(
+                    new THREE.BoxGeometry(lineLength, lineHeight, lineThickness),
+                    lineMaterial
+                );
+                line.rotation.y = rotationAngle;
+
+                const offset  = -(alongZ ? roofDepth : roofWidth) / 2 + lineSpacing * i;
+                const xOffset = alongZ ? Math.sin(rotationAngle) * offset : offset;
+                const zOffset = alongZ ? Math.cos(rotationAngle) * offset : 0;
+
+                line.position.set(x + xOffset, y - roofHeight / 2 - lineHeight / 2, z + zOffset);
+                group.add(line);
+            }
+
+            return group;
+        }
+
+        function createMainRoof(x, y, z) {
+            const geometry = new THREE.BoxGeometry(30, 1, 15);
+            const material = new THREE.MeshLambertMaterial({ color: 0xffffff });
+            const roof = new THREE.Mesh(geometry, material);
+            roof.position.set(x, y, z);
+            roof.castShadow = true;
+            roof.receiveShadow = true;
+            return roof;
+        }
+
+        // Add scene elements
+        scene.add(createVerticalGreyCuboid(0, 0, -6));
+        scene.add(createVerticalGreyCuboid(13, 0, -1));
+        scene.add(createRoofWithRotatedLines(0, 10, 0, Math.PI / 2));
+        scene.add(createMainRoof(0, 15, 0));
+
+        // Furniture
+        scene.add(createTable(-3, -3));
+        scene.add(createTable(3, -3));
+
+        scene.add(createLongChair(-4, -3, 1.6));
+        scene.add(createLongChair(-1.5, -3, -1.6));
+        scene.add(createLongChair(-3, -1.5, Math.PI));
+        scene.add(createLongChair(1.5, -3, 1.6));
+        scene.add(createLongChair(4.5, -3, -1.6));
+        scene.add(createLongChair(3, -1.5, Math.PI));
+
+        scene.add(createArmchair(-8, -5, 0));
+
+        scene.add(createPendantLight(-3, -3));
+        scene.add(createPendantLight(0, -3));
+        scene.add(createPendantLight(3, -3));
+
+        scene.add(createTrash(11, -2, Math.PI / 2));
+
+        // Camera controls
+        let camera_mode = 1;
+        const radius = 15;
+        let theta = Math.PI / 4;
+        let phi   = Math.PI / 4;
+
+        function updateCamera() {
+            let eye;
+            switch (camera_mode) {
+                case 1:
+                    eye = new THREE.Vector3(
+                        radius * Math.sin(theta) * Math.cos(phi - 273 * Math.PI / 180),
+                        radius * Math.sin(theta) * Math.sin(phi + Math.PI / 2),
+                        radius * Math.cos(theta)
+                    );
+                    break;
+                case 2:
+                    eye = new THREE.Vector3(
+                        radius * Math.sin(theta + 0.4) * Math.cos(phi),
+                        radius * Math.sin(theta + 0.4) * Math.sin(phi),
+                        radius * Math.cos(theta + 0.4)
+                    );
+                    break;
+                case 3:
+                    eye = new THREE.Vector3(
+                        radius * Math.sin(theta + 0.5) * Math.cos(phi + 0.6),
+                        radius * Math.sin(theta + 0.5) * Math.sin(phi + 0.6),
+                        radius * Math.cos(theta + 0.5)
+                    );
+                    break;
+            }
+            camera.position.copy(eye);
+            camera.lookAt(new THREE.Vector3(0, 2, 0));
+        }
+
+        // Mouse and wheel controls
+        let mouseDown = false, mouseX = 0, mouseY = 0;
+
+        renderer.domElement.addEventListener('mousedown', event => {
+            mouseDown = true;
+            mouseX = event.clientX;
+            mouseY = event.clientY;
+        });
+
+        renderer.domElement.addEventListener('mouseup', () => mouseDown = false);
+
+        renderer.domElement.addEventListener('mousemove', event => {
+            if (mouseDown) {
+                const deltaX = event.clientX - mouseX;
+                const deltaY = event.clientY - mouseY;
+                phi += deltaX * 0.01;
+                theta = Math.max(0.1, Math.min(Math.PI - 0.1, theta + deltaY * 0.01));
+                mouseX = event.clientX;
+                mouseY = event.clientY;
+                updateCamera();
+            }
+        });
+
+        renderer.domElement.addEventListener('wheel', event => {
+            const scale = event.deltaY > 0 ? 1.1 : 0.9;
+            camera.position.multiplyScalar(scale);
+        });
+
+        // Camera buttons
+        document.getElementById('cam1').addEventListener('click', () => {
+            camera_mode = 1;
+            document.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+            document.getElementById('cam1').classList.add('active');
+            updateCamera();
+        });
+
+        document.getElementById('cam2').addEventListener('click', () => {
+            camera_mode = 2;
+            document.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+            document.getElementById('cam2').classList.add('active');
+            updateCamera();
+        });
+
+        document.getElementById('cam3').addEventListener('click', () => {
+            camera_mode = 3;
+            document.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+            document.getElementById('cam3').classList.add('active');
+            updateCamera();
+        });
+
+        // Initial setup and animate
+        updateCamera();
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
