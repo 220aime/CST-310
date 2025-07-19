@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>L-System Tree Generator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: rgb(5, 5, 5);
+        }
+        
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #fff;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .controls {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        input, textarea, select {
+            width: 100%;
+            padding: 8px;
+            border: none;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #333;
+        }
+        
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+        
+        button {
+            background: white;
+            color: rgb(0, 0, 0);
+            border: none;
+            padding: 12px 25px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            margin: 5px;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .output {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+        
+        .output h3 {
+            margin-top: 0;
+            color: #4ecdc4;
+        }
+        
+        .string-output {
+            font-family: 'Courier New', monospace;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+            word-break: break-all;
+            max-height: 200px;
+            overflow-y: auto;
+            font-size: 12px;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .stat-card {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4ecdc4;
+        }
+        
+        .preset-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+        
+        .canvas-container {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        
+        #treeCanvas {
+            border: 2px solid #333;
+            border-radius: 5px;
+            display: block;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+ 
+        <div class="controls">
+            
+            <div class="form-group">
+                <label>Axiom (Starting String):</label>
+                <input type="text" id="axiom" value="F" placeholder="F">
+            </div>
+            
+            <div class="form-group">
+                <label>Grammar Rules (one per line, format: symbol -> replacement):</label>
+                <textarea id="rules" placeholder="F -> F[+F]F[-F]F">F -> F[+F]F[-F]F</textarea>
+            </div>
+            
+            <div class="form-group">
+                <label>Iterations:</label>
+                <input type="number" id="iterations" value="3" min="1" max="6">
+            </div>
+            
+            <div class="form-group">
+                <label>Angle (degrees):</label>
+                <input type="number" id="angle" value="25.7" step="0.1">
+            </div>
+            
+            <button onclick="generateLSystem()">Generate L-System</button>
+            <button onclick="drawTree()">Draw Tree</button>
+            <button onclick="exportData()">Export Data</button>
+        </div>
+        
+        <div class="output" id="output" style="display: none;">
+            
+        <div class="canvas-container">
+            <canvas id="treeCanvas" width="800" height="600"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // L-System Implementation (from previous code)
+        class LSystem {
+            constructor() {
+                this.axiom = "";
+                this.rules = new Map();
+                this.iterations = 0;
+                this.angle = 0;
+                this.length = 1;
+            }
+
+            setGrammar(axiom, rules, iterations, angle) {
+                this.axiom = axiom;
+                this.rules = new Map();
+                this.iterations = iterations;
+                this.angle = angle;
+                
+                // Parse rules from textarea
+                const ruleLines = rules.split('\n');
+                for (let line of ruleLines) {
+                    line = line.trim();
+                    if (line && line.includes('->')) {
+                        const [predecessor, successor] = line.split('->').map(s => s.trim());
+                        this.rules.set(predecessor, successor);
+                    }
+                }
+            }
+
+            generate() {
+                let current = this.axiom;
+                
+                for (let i = 0; i < this.iterations; i++) {
+                    current = this.expandString(current);
+                    if (current.length > 10000) break; // Prevent browser freeze
+                }
+                
+                return current;
+            }
+
+            expandString(input) {
+                let result = "";
+                
+                for (let char of input) {
+                    if (this.rules.has(char)) {
+                        result += this.rules.get(char);
+                    } else {
+                        result += char;
+                    }
+                }
+                
+                return result;
+            }
+        }
+
+        class TurtleState {
+            constructor(x = 0, y = 0, heading = 0) {
+                this.x = x;
+                this.y = y;
+                this.heading = heading; // in degrees
+                this.length = 10;
+            }
+
+            clone() {
+                const state = new TurtleState(this.x, this.y, this.heading);
+                state.length = this.length;
+                return state;
+            }
+        }
+
+        class TurtleRenderer {
+            constructor(canvas, angleStep = 25.7, stepLength = 10) {
+                this.canvas = canvas;
+                this.ctx = canvas.getContext('2d');
+                this.angleStep = angleStep;
+                this.stepLength = stepLength;
+                this.state = new TurtleState(canvas.width/2, canvas.height - 50, -90);
+                this.stateStack = [];
+                this.commands = [];
+            }
+
+            render(lSystemString) {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                this.ctx.strokeStyle = '#2d5a27';
+                this.ctx.lineWidth = 2;
+                this.ctx.lineCap = 'round';
+                
+                this.state = new TurtleState(this.canvas.width/2, this.canvas.height - 50, -90);
+                this.stateStack = [];
+                this.commands = [];
+
+                this.ctx.beginPath();
+
+                for (let char of lSystemString) {
+                    this.processCommand(char);
+                }
+
+                this.ctx.stroke();
+                return this.commands.length;
+            }
+
+            processCommand(command) {
+                switch (command) {
+                    case 'F': // Move forward and draw
+                        this.moveForward(true);
+                        break;
+                    case 'f': // Move forward without drawing
+                        this.moveForward(false);
+                        break;
+                    case '+': // Turn left
+                        this.state.heading -= this.angleStep;
+                        break;
+                    case '-': // Turn right
+                        this.state.heading += this.angleStep;
+                        break;
+                    case '[': // Push state onto stack
+                        this.stateStack.push(this.state.clone());
+                        break;
+                    case ']': // Pop state from stack
+                        if (this.stateStack.length > 0) {
+                            this.state = this.stateStack.pop();
+                            this.ctx.moveTo(this.state.x, this.state.y);
+                        }
+                        break;
+                }
+            }
+
+            moveForward(draw) {
+                const startX = this.state.x;
+                const startY = this.state.y;
+                
+                const radians = this.state.heading * Math.PI / 180;
+                this.state.x += this.stepLength * Math.cos(radians);
+                this.state.y += this.stepLength * Math.sin(radians);
+
+                if (draw) {
+                    this.ctx.moveTo(startX, startY);
+                    this.ctx.lineTo(this.state.x, this.state.y);
+                    this.commands.push({
+                        type: 'line',
+                        from: {x: startX, y: startY},
+                        to: {x: this.state.x, y: this.state.y}
+                    });
+                } else {
+                    this.ctx.moveTo(this.state.x, this.state.y);
+                }
+            }
+        }
+
+        // Global variables
+        let lSystem = new LSystem();
+        let turtle;
+        let lastGeneratedString = "";
+
+        // Initialize
+        window.onload = function() {
+            const canvas = document.getElementById('treeCanvas');
+            turtle = new TurtleRenderer(canvas);
+            loadPreset('simple');
+        };
+
+        function loadPreset(name) {
+            const preset = presets[name];
+            document.getElementById('axiom').value = preset.axiom;
+            document.getElementById('rules').value = preset.rules;
+            document.getElementById('iterations').value = preset.iterations;
+            document.getElementById('angle').value = preset.angle;
+        }
+
+        function generateLSystem() {
+            const axiom = document.getElementById('axiom').value;
+            const rules = document.getElementById('rules').value;
+            const iterations = parseInt(document.getElementById('iterations').value);
+            const angle = parseFloat(document.getElementById('angle').value);
+
+            lSystem.setGrammar(axiom, rules, iterations, angle);
+            lastGeneratedString = lSystem.generate();
+
+            // Update UI
+            document.getElementById('output').style.display = 'block';
+            document.getElementById('stringOutput').textContent = 
+                lastGeneratedString.length > 1000 ? 
+                lastGeneratedString.substring(0, 1000) + "... (truncated)" : 
+                lastGeneratedString;
+            
+            document.getElementById('stringLength').textContent = lastGeneratedString.length;
+            document.getElementById('actualIterations').textContent = iterations;
+            
+            // Count branches and draw commands
+            const branches = (lastGeneratedString.match(/\[/g) || []).length;
+            const drawCommands = (lastGeneratedString.match(/F/g) || []).length;
+            
+            document.getElementById('branches').textContent = branches;
+            document.getElementById('drawCommands').textContent = drawCommands;
+        }
+
+        function drawTree() {
+            if (!lastGeneratedString) {
+                generateLSystem();
+            }
+            
+            const angle = parseFloat(document.getElementById('angle').value);
+            turtle.angleStep = angle;
+            
+            // Adjust step length based on string complexity
+            const baseLength = Math.min(400 / Math.max(lastGeneratedString.length / 10, 1), 20);
+            turtle.stepLength = Math.max(baseLength, 2);
+            
+            const commandCount = turtle.render(lastGeneratedString);
+            document.getElementById('drawCommands').textContent = commandCount;
+        }
+
+        function exportData() {
+            if (!lastGeneratedString) {
+                alert("Please generate an L-System first!");
+                return;
+            }
+
+            const data = {
+                axiom: document.getElementById('axiom').value,
+                rules: document.getElementById('rules').value,
+                iterations: parseInt(document.getElementById('iterations').value),
+                angle: parseFloat(document.getElementById('angle').value),
+                generatedString: lastGeneratedString,
+                stringLength: lastGeneratedString.length
+            };
+
+            const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'lsystem_data.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>
