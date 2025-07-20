@@ -1,6 +1,6 @@
 /*Aime Serge Tuyishime
 JULY 20,2025
-CST-310 |PROJECT 7: PUTTING IT ALL TOGETHER| PART2
+CST-310 |PROJECT 7: PUTTING IT ALL TOGETHER| PART II
 ColorCubeFlyby.cpp
 Enhanced RGB Color Cubes with FIXED keyboard controls and user-friendly interface
 */
