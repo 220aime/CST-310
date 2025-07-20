@@ -1,4 +1,4 @@
-# OpenGL Graphics Demos
+# OpenGL Putting It All Together
 
 This folder contains two OpenGL programs in one unified script:
 
