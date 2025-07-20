@@ -1,6 +1,6 @@
 /*Aime Serge Tuyishime
 JULY 20, 2025
-CST-310 |PROJECT 7- PURTING IT ALL TOGETHER
+CST-310 |PROJECT 7: PURTING IT ALL TOGETHER |PART I
 CheckeredTriangles.cpp
 Trivial illustration of texture mapping, with interactive controls.
 */
