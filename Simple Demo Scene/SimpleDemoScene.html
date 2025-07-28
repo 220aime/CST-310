@@ -1,0 +1,1792 @@
+<!-- Aime Serge Tuyishime
+ Computer Graphic |CST-310
+ July 27th, 2025 -->
+ 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #000;
+            font-family: 'Arial', sans-serif;
+        }
+        
+        #container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            z-index: 100;
+            font-size: 14px;
+            text-shadow: 0 0 10px rgba(255,255,255,0.5);
+        }
+        
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            color: white;
+            z-index: 100;
+            font-size: 12px;
+            text-align: right;
+        }
+
+
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="info">
+        </div>
+        <div id="controls">
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Scene setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 10000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.getElementById('container').appendChild(renderer.domElement);
+
+        // Camera path variables
+        let cameraTime = 0;
+        let cameraSpeed = 0.005; // Increased from 0.003
+        let followingRocket = false;
+        let cameraMode = 0; // 0: exploration, 1: galaxy focus, 2: sun focus, 3: planet chase
+        let cameraTransition = 0;
+        let focusTarget = null;
+
+        // Rocket variables
+        let rocket;
+        let rocketEngineOn = true;
+        let rocketFlames = [];
+        let rocketLaunched = false;
+        let rocketTime = 0;
+        
+        // Create starfield
+        function createStarfield() {
+            const starGeometry = new THREE.BufferGeometry();
+            const starCount = 10000;
+            const positions = new Float32Array(starCount * 3);
+            const colors = new Float32Array(starCount * 3);
+            
+            for (let i = 0; i < starCount * 3; i += 3) {
+                positions[i] = (Math.random() - 0.5) * 6000;
+                positions[i + 1] = (Math.random() - 0.5) * 6000;
+                positions[i + 2] = (Math.random() - 0.5) * 6000;
+                
+                const color = new THREE.Color();
+                color.setHSL(Math.random() * 0.2 + 0.5, 0.5, Math.random() * 0.5 + 0.5);
+                colors[i] = color.r;
+                colors[i + 1] = color.g;
+                colors[i + 2] = color.b;
+            }
+            
+            starGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            starGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            
+            const starMaterial = new THREE.PointsMaterial({
+                size: 2,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.8
+            });
+            
+            const stars = new THREE.Points(starGeometry, starMaterial);
+            scene.add(stars);
+        }
+
+        // Create the Sun
+        function createSun() {
+            const sunGroup = new THREE.Group();
+            
+            // Main sun sphere
+            const sunGeometry = new THREE.SphereGeometry(80, 32, 32);
+            const sunMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0xffaa00,
+                transparent: true,
+                opacity: 0.9
+            });
+            const sun = new THREE.Mesh(sunGeometry, sunMaterial);
+            sunGroup.add(sun);
+            
+            // Sun corona/glow effect
+            const coronaGeometry = new THREE.SphereGeometry(95, 32, 32);
+            const coronaMaterial = new THREE.MeshBasicMaterial({
+                color: 0xff6600,
+                transparent: true,
+                opacity: 0.3
+            });
+            const corona = new THREE.Mesh(coronaGeometry, coronaMaterial);
+            sunGroup.add(corona);
+            
+            // Outer glow
+            const glowGeometry = new THREE.SphereGeometry(110, 32, 32);
+            const glowMaterial = new THREE.MeshBasicMaterial({
+                color: 0xffdd44,
+                transparent: true,
+                opacity: 0.1
+            });
+            const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+            sunGroup.add(glow);
+            
+            // Solar flares (particles)
+            const flareGeometry = new THREE.BufferGeometry();
+            const flareCount = 200;
+            const positions = new Float32Array(flareCount * 3);
+            const colors = new Float32Array(flareCount * 3);
+            
+            for (let i = 0; i < flareCount * 3; i += 3) {
+                const radius = 85 + Math.random() * 50;
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.random() * Math.PI;
+                
+                positions[i] = radius * Math.sin(phi) * Math.cos(theta);
+                positions[i + 1] = radius * Math.sin(phi) * Math.sin(theta);
+                positions[i + 2] = radius * Math.cos(phi);
+                
+                const color = new THREE.Color();
+                color.setHSL(0.1, 1, Math.random() * 0.5 + 0.5);
+                colors[i] = color.r;
+                colors[i + 1] = color.g;
+                colors[i + 2] = color.b;
+            }
+            
+            flareGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            flareGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            
+            const flareMaterial = new THREE.PointsMaterial({
+                size: 4,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.8
+            });
+            
+            const flares = new THREE.Points(flareGeometry, flareMaterial);
+            sunGroup.add(flares);
+            
+            sunGroup.position.set(-1000, 200, -800);
+            sunGroup.userData = { 
+                rotationSpeed: 0.005,
+                flares: flares
+            };
+            
+            scene.add(sunGroup);
+            return sunGroup;
+        }
+
+        // Create Rocket
+        function createRocket() {
+            const rocketGroup = new THREE.Group();
+            
+            // Rocket body (cylinder) - reduced size
+            const bodyGeometry = new THREE.CylinderGeometry(4, 4, 20, 16);
+            const bodyMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0xcc3333,
+                shininess: 30,
+                specular: 0x444444
+            });
+            const rocketBody = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            rocketGroup.add(rocketBody);
+            
+            // Rocket nose cone - reduced size
+            const noseGeometry = new THREE.ConeGeometry(4, 10, 16);
+            const noseMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0xff6666,
+                shininess: 50,
+                specular: 0x666666
+            });
+            const rocketNose = new THREE.Mesh(noseGeometry, noseMaterial);
+            rocketNose.position.y = 15;
+            rocketGroup.add(rocketNose);
+            
+            // Rocket fins - reduced size
+            const finGeometry = new THREE.BoxGeometry(1, 8, 4);
+            const finMaterial = new THREE.MeshPhongMaterial({ color: 0xaa2222 });
+            
+            for (let i = 0; i < 4; i++) {
+                const fin = new THREE.Mesh(finGeometry, finMaterial);
+                const angle = (i / 4) * Math.PI * 2;
+                fin.position.x = Math.cos(angle) * 5;
+                fin.position.z = Math.sin(angle) * 5;
+                fin.position.y = -8;
+                fin.rotation.y = angle;
+                rocketGroup.add(fin);
+            }
+            
+            // Create flame particles
+            createRocketFlames(rocketGroup);
+            
+            // Position rocket
+            rocketGroup.position.set(0, -200, 100);
+            rocketGroup.rotation.x = -Math.PI/10; // Point upward
+            
+            scene.add(rocketGroup);
+            return rocketGroup;
+        }
+
+        // Create rocket flame effects
+        function createRocketFlames(rocketGroup) {
+            // Main flame - reduced size
+            const flameGeometry = new THREE.ConeGeometry(3, 12, 8);
+            const flameMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0xff4500,
+                transparent: true,
+                opacity: 0.8
+            });
+            const mainFlame = new THREE.Mesh(flameGeometry, flameMaterial);
+            mainFlame.position.y = -18;
+            mainFlame.rotation.x = Math.PI;
+            rocketGroup.add(mainFlame);
+            rocketFlames.push(mainFlame);
+            
+            // Secondary flames - reduced size
+            for (let i = 0; i < 3; i++) {
+                const smallFlameGeometry = new THREE.ConeGeometry(1.5, 8, 6);
+                const colors = [0xff6500, 0xff8500, 0xffaa00];
+                const smallFlameMaterial = new THREE.MeshBasicMaterial({ 
+                    color: colors[i],
+                    transparent: true,
+                    opacity: 0.6
+                });
+                const smallFlame = new THREE.Mesh(smallFlameGeometry, smallFlameMaterial);
+                smallFlame.position.y = -15 - i * 3;
+                smallFlame.position.x = (Math.random() - 0.5) * 3;
+                smallFlame.position.z = (Math.random() - 0.5) * 3;
+                smallFlame.rotation.x = Math.PI;
+                rocketGroup.add(smallFlame);
+                rocketFlames.push(smallFlame);
+            }
+            
+            // Particle system for sparkles - reduced size
+            const particleGeometry = new THREE.BufferGeometry();
+            const particleCount = 30;
+            const positions = new Float32Array(particleCount * 3);
+            const colors = new Float32Array(particleCount * 3);
+            
+            for (let i = 0; i < particleCount * 3; i += 3) {
+                positions[i] = (Math.random() - 0.5) * 8;
+                positions[i + 1] = -15 - Math.random() * 10;
+                positions[i + 2] = (Math.random() - 0.5) * 8;
+                
+                const color = new THREE.Color();
+                color.setHSL(0.1, 1, Math.random() * 0.5 + 0.5);
+                colors[i] = color.r;
+                colors[i + 1] = color.g;
+                colors[i + 2] = color.b;
+            }
+            
+            particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            particleGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            
+            const particleMaterial = new THREE.PointsMaterial({
+                size: 1.5,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.8
+            });
+            
+            const particles = new THREE.Points(particleGeometry, particleMaterial);
+            rocketGroup.add(particles);
+            rocketFlames.push(particles);
+        }
+
+        // Create Earth
+        function createEarth() {
+            const earthGroup = new THREE.Group();
+            const sunPosition = new THREE.Vector3(-1000, 200, -800); // Sun's position
+            
+            // Earth sphere
+            const earthGeometry = new THREE.SphereGeometry(40, 32, 32);
+            
+            // Create Earth texture procedurally
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            
+            // Create a simple Earth-like texture
+            const gradient = ctx.createLinearGradient(0, 0, 512, 256);
+            gradient.addColorStop(0, '#1e3a8a');
+            gradient.addColorStop(0.3, '#3b82f6');
+            gradient.addColorStop(0.7, '#22c55e');
+            gradient.addColorStop(1, '#15803d');
+            
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 512, 256);
+            
+            // Add some continents
+            ctx.fillStyle = '#22c55e';
+            for (let i = 0; i < 20; i++) {
+                ctx.beginPath();
+                ctx.arc(Math.random() * 512, Math.random() * 256, Math.random() * 30 + 10, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            const earthTexture = new THREE.CanvasTexture(canvas);
+            const earthMaterial = new THREE.MeshPhongMaterial({ 
+                map: earthTexture,
+                shininess: 10
+            });
+            
+            const earth = new THREE.Mesh(earthGeometry, earthMaterial);
+            earthGroup.add(earth);
+            
+            // Moon
+            const moonGeometry = new THREE.SphereGeometry(10, 16, 16);
+            const moonMaterial = new THREE.MeshPhongMaterial({ color: 0xcccccc });
+            const moon = new THREE.Mesh(moonGeometry, moonMaterial);
+            moon.position.set(60, 0, 0);
+            earthGroup.add(moon);
+            
+            // Position Earth in its orbit around the sun
+            const earthOrbitRadius = 350;
+            const initialAngle = Math.random() * Math.PI * 2;
+            earthGroup.position.set(
+                sunPosition.x + Math.cos(initialAngle) * earthOrbitRadius,
+                sunPosition.y,
+                sunPosition.z + Math.sin(initialAngle) * earthOrbitRadius
+            );
+            
+            earthGroup.userData = {
+                orbitRadius: earthOrbitRadius,
+                orbitSpeed: 0.018,
+                orbitCenter: sunPosition,
+                orbitAngle: initialAngle
+            };
+            
+            scene.add(earthGroup);
+            return earthGroup;
+        }
+
+        // Create Solar System planets
+        function createSolarSystemPlanets() {
+            const planets = [];
+            const sunPosition = new THREE.Vector3(-1000, 200, -800); // Sun's position
+            
+            // Solar System planets data (size, color, orbital radius from sun, orbital speed, name)
+            const planetData = [
+                { size: 18, color: 0x8c7853, orbitRadius: 200, speed: 0.025, name: 'Mercury', dynamic: false },
+                { size: 25, color: 0xffa500, orbitRadius: 280, speed: 0.020, name: 'Venus', dynamic: false },
+                { size: 35, color: 0xff6b35, orbitRadius: 380, speed: 0.015, name: 'Mars', dynamic: false },
+                { size: 70, color: 0xd2691e, orbitRadius: 520, speed: 0.010, name: 'Jupiter', hasRings: true, dynamic: false },
+                { size: 60, color: 0xffd700, orbitRadius: 650, speed: 0.008, name: 'Saturn', hasRings: true, dynamic: false },
+                { size: 42, color: 0x4fd0e7, orbitRadius: 780, speed: 0.006, name: 'Uranus', hasRings: true, dynamic: false },
+                { size: 40, color: 0x4169e1, orbitRadius: 900, speed: 0.004, name: 'Neptune', dynamic: false },
+                // Add some dynamic exoplanets for variety
+                { size: 48, color: 0x9370db, orbitRadius: 1100, speed: 0.007, name: 'Pulsing Alpha', dynamic: true, sizeRange: [35, 60] },
+                { size: 52, color: 0xff1493, orbitRadius: 1300, speed: 0.005, name: 'Breathing Beta', dynamic: true, sizeRange: [40, 70] },
+                { size: 38, color: 0x32cd32, orbitRadius: 1000, speed: 0.009, name: 'Gamma', dynamic: false },
+                { size: 45, color: 0xff4500, orbitRadius: 1200, speed: 0.006, name: 'Expanding Delta', dynamic: true, sizeRange: [30, 55] },
+                { size: 32, color: 0x8fbc8f, orbitRadius: 1400, speed: 0.003, name: 'Epsilon', dynamic: false }
+            ];
+            
+            planetData.forEach((data, index) => {
+                const planetGroup = new THREE.Group();
+                
+                const geometry = new THREE.SphereGeometry(data.size, 20, 20);
+                const material = new THREE.MeshPhongMaterial({ 
+                    color: data.color,
+                    shininess: 30,
+                    specular: 0x222222
+                });
+                
+                const planet = new THREE.Mesh(geometry, material);
+                planetGroup.add(planet);
+                
+                // Add rings to specific planets
+                if (data.hasRings) {
+                    const ringGeometry = new THREE.RingGeometry(data.size * 1.3, data.size * 1.8, 32);
+                    const ringMaterial = new THREE.MeshBasicMaterial({ 
+                        color: data.color,
+                        opacity: 0.6,
+                        transparent: true,
+                        side: THREE.DoubleSide
+                    });
+                    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+                    ring.rotation.x = Math.PI / 2 + (Math.random() - 0.5) * 0.5;
+                    planetGroup.add(ring);
+                    
+                    // Additional ring for Saturn-like appearance
+                    if (data.name === 'Saturn') {
+                        const ring2Geometry = new THREE.RingGeometry(data.size * 1.9, data.size * 2.2, 32);
+                        const ring2Material = new THREE.MeshBasicMaterial({ 
+                            color: 0xddd700,
+                            opacity: 0.4,
+                            transparent: true,
+                            side: THREE.DoubleSide
+                        });
+                        const ring2 = new THREE.Mesh(ring2Geometry, ring2Material);
+                        ring2.rotation.x = Math.PI / 2;
+                        planetGroup.add(ring2);
+                    }
+                }
+                
+                // Add moons to larger planets
+                if (data.size > 40) {
+                    const moonCount = Math.floor(Math.random() * 3) + 1;
+                    for (let m = 0; m < moonCount; m++) {
+                        const moonGeometry = new THREE.SphereGeometry(data.size * 0.1, 8, 8);
+                        const moonMaterial = new THREE.MeshPhongMaterial({ color: 0xaaaaaa });
+                        const moon = new THREE.Mesh(moonGeometry, moonMaterial);
+                        
+                        const moonDistance = data.size * (1.5 + m * 0.5);
+                        moon.position.set(moonDistance, 0, 0);
+                        
+                        const moonOrbit = new THREE.Group();
+                        moonOrbit.add(moon);
+                        moonOrbit.userData = { orbitSpeed: data.speed * (2 + m) };
+                        planetGroup.add(moonOrbit);
+                    }
+                }
+                
+                // Position planet initially in its orbit around the sun
+                const initialAngle = Math.random() * Math.PI * 2; // Random starting position
+                const orbitCenter = sunPosition.clone();
+                
+                // Create more oblique orbital planes
+                const orbitTiltX = (Math.random() - 0.5) * 0.8; // More dramatic tilt
+                const orbitTiltZ = (Math.random() - 0.5) * 0.6;
+                
+                planetGroup.position.set(
+                    orbitCenter.x + Math.cos(initialAngle) * data.orbitRadius,
+                    orbitCenter.y + Math.sin(initialAngle * orbitTiltX) * 100, // Oblique height
+                    orbitCenter.z + Math.sin(initialAngle) * data.orbitRadius * Math.cos(orbitTiltZ)
+                );
+                
+                planetGroup.userData = { 
+                    rotationSpeed: data.speed * 0.5, // Planet rotation on its axis
+                    name: data.name,
+                    orbitRadius: data.orbitRadius,
+                    orbitSpeed: data.speed,
+                    orbitCenter: orbitCenter,
+                    orbitAngle: initialAngle, // Track current orbital position
+                    orbitTiltX: orbitTiltX, // Oblique orbital plane tilts
+                    orbitTiltZ: orbitTiltZ,
+                    isDynamic: data.dynamic || false,
+                    originalSize: data.size,
+                    sizeRange: data.sizeRange || [data.size, data.size],
+                    sizePhase: Math.random() * Math.PI * 2
+                };
+                
+                scene.add(planetGroup);
+                planets.push(planetGroup);
+            });
+            
+            return planets;
+        }
+
+        // Create additional celestial objects
+        function createAdditionalCelestialObjects() {
+            const objects = [];
+            
+            // Asteroid belt
+            for (let i = 0; i < 100; i++) {
+                const asteroidGeometry = new THREE.DodecahedronGeometry(Math.random() * 5 + 1);
+                const asteroidMaterial = new THREE.MeshPhongMaterial({ color: 0x696969 });
+                const asteroid = new THREE.Mesh(asteroidGeometry, asteroidMaterial);
+                
+                const angle = Math.random() * Math.PI * 2;
+                const radius = 600 + Math.random() * 200;
+                asteroid.position.set(
+                    Math.cos(angle) * radius,
+                    (Math.random() - 0.5) * 100,
+                    Math.sin(angle) * radius
+                );
+                
+                asteroid.userData = {
+                    orbitSpeed: Math.random() * 0.01 + 0.005,
+                    rotationSpeed: Math.random() * 0.05 + 0.01
+                };
+                
+                scene.add(asteroid);
+                objects.push(asteroid);
+            }
+            
+            // Comets
+            for (let i = 0; i < 5; i++) {
+                const cometGroup = new THREE.Group();
+                
+                // Comet nucleus
+                const nucleusGeometry = new THREE.SphereGeometry(3, 8, 8);
+                const nucleusMaterial = new THREE.MeshPhongMaterial({ color: 0x2f4f4f });
+                const nucleus = new THREE.Mesh(nucleusGeometry, nucleusMaterial);
+                cometGroup.add(nucleus);
+                
+                // Comet tail
+                const tailGeometry = new THREE.ConeGeometry(2, 50, 8);
+                const tailMaterial = new THREE.MeshBasicMaterial({ 
+                    color: 0x87ceeb,
+                    transparent: true,
+                    opacity: 0.6
+                });
+                const tail = new THREE.Mesh(tailGeometry, tailMaterial);
+                tail.position.z = -25;
+                tail.rotation.x = Math.PI / 2;
+                cometGroup.add(tail);
+                
+                cometGroup.position.set(
+                    (Math.random() - 0.5) * 2000,
+                    (Math.random() - 0.5) * 1000,
+                    (Math.random() - 0.5) * 2000
+                );
+                
+                cometGroup.userData = {
+                    velocity: new THREE.Vector3(
+                        (Math.random() - 0.5) * 2,
+                        (Math.random() - 0.5) * 1,
+                        (Math.random() - 0.5) * 2
+                    )
+                };
+                
+                scene.add(cometGroup);
+                objects.push(cometGroup);
+            }
+            
+            return objects;
+        }
+
+        // Create 2 groups of 3 robotic humans holding hands
+        function createRoboticHumans() {
+            const humanGroups = [];
+            
+            // Create 2 separate groups
+            for (let groupIndex = 0; groupIndex < 2; groupIndex++) {
+                const humanGroup = new THREE.Group();
+                const humans = [];
+                
+                // Create 3 people positioned to hold hands in each group
+                for (let i = 0; i < 3; i++) {
+                    const person = new THREE.Group();
+                    
+                    // Body (cuboid)
+                    const bodyGeometry = new THREE.BoxGeometry(6, 12, 4);
+                    const bodyMaterial = new THREE.MeshPhongMaterial({ color: 0xffffff });
+                    const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+                    person.add(body);
+                    
+                    // Head (sphere)
+                    const headGeometry = new THREE.SphereGeometry(3, 12, 12);
+                    const headMaterial = new THREE.MeshPhongMaterial({ 
+                        color: 0xcccccc,
+                        transparent: true,
+                        opacity: 0.9
+                    });
+                    const head = new THREE.Mesh(headGeometry, headMaterial);
+                    head.position.y = 8;
+                    person.add(head);
+                    
+                    // Arms (cylinders)
+                    const armGeometry = new THREE.CylinderGeometry(1, 1, 8, 8);
+                    const armMaterial = new THREE.MeshPhongMaterial({ color: 0xdddddd });
+                    
+                    const leftArm = new THREE.Mesh(armGeometry, armMaterial);
+                    leftArm.position.set(-4, 2, 0);
+                    leftArm.rotation.z = Math.PI / 4; // Extended to hold hands
+                    person.add(leftArm);
+                    
+                    const rightArm = new THREE.Mesh(armGeometry, armMaterial);
+                    rightArm.position.set(4, 2, 0);
+                    rightArm.rotation.z = -Math.PI / 4; // Extended to hold hands
+                    person.add(rightArm);
+                    
+                    // Legs (cylinders)
+                    const legGeometry = new THREE.CylinderGeometry(1.2, 1.2, 10, 8);
+                    const legMaterial = new THREE.MeshPhongMaterial({ color: 0xbbbbbb });
+                    
+                    const leftLeg = new THREE.Mesh(legGeometry, legMaterial);
+                    leftLeg.position.set(-2, -11, 0);
+                    person.add(leftLeg);
+                    
+                    const rightLeg = new THREE.Mesh(legGeometry, legMaterial);
+                    rightLeg.position.set(2, -11, 0);
+                    person.add(rightLeg);
+                    
+                    // Jetpack (box) - different colors for different groups
+                    const jetpackGeometry = new THREE.BoxGeometry(4, 8, 3);
+                    const jetpackColor = groupIndex === 0 ? 0x4169e1 : 0xe74c3c; // Blue for first group, red for second
+                    const jetpackMaterial = new THREE.MeshPhongMaterial({ color: jetpackColor });
+                    const jetpack = new THREE.Mesh(jetpackGeometry, jetpackMaterial);
+                    jetpack.position.set(0, 2, -4);
+                    person.add(jetpack);
+                    
+                    // Helmet visor (sphere)
+                    const visorGeometry = new THREE.SphereGeometry(3.2, 12, 12);
+                    const visorMaterial = new THREE.MeshBasicMaterial({ 
+                        color: 0x87ceeb,
+                        transparent: true,
+                        opacity: 0.3
+                    });
+                    const visor = new THREE.Mesh(visorGeometry, visorMaterial);
+                    visor.position.y = 8;
+                    person.add(visor);
+                    
+                    // Position the 3 people in a line holding hands
+                    person.position.x = (i - 1) * 20; // Space them 20 units apart
+                    
+                    humanGroup.add(person);
+                    humans.push(person);
+                }
+                
+                // Position the groups in different locations
+                if (groupIndex === 0) {
+                    humanGroup.position.set(500, 200, -300);
+                    humanGroup.userData = {
+                        velocity: new THREE.Vector3(1, 0.5, 0.8),
+                        rotationSpeed: 0.005
+                    };
+                } else {
+                    humanGroup.position.set(-300, -100, 400);
+                    humanGroup.userData = {
+                        velocity: new THREE.Vector3(-0.8, 0.3, -1),
+                        rotationSpeed: 0.003
+                    };
+                }
+                
+                scene.add(humanGroup);
+                humanGroups.push({ group: humanGroup, individuals: humans });
+            }
+            
+            return humanGroups;
+        }
+
+        // Create advanced exploration satellites
+        function createAdvancedSatellites() {
+            const satellites = [];
+            
+            for (let i = 0; i < 10; i++) {
+                const satelliteGroup = new THREE.Group();
+                
+                // Main body (cylinder)
+                const bodyGeometry = new THREE.CylinderGeometry(3, 3, 8, 12);
+                const bodyMaterial = new THREE.MeshPhongMaterial({ color: 0x2c3e50 });
+                const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+                satelliteGroup.add(body);
+                
+                // Solar panels (larger and more detailed)
+                const panelGeometry = new THREE.BoxGeometry(0.2, 12, 6);
+                const panelMaterial = new THREE.MeshPhongMaterial({ color: 0x1a1a2e });
+                
+                const panel1 = new THREE.Mesh(panelGeometry, panelMaterial);
+                panel1.position.x = 8;
+                const panel2 = new THREE.Mesh(panelGeometry, panelMaterial);
+                panel2.position.x = -8;
+                satelliteGroup.add(panel1, panel2);
+                
+                // Communication dish
+                const dishGeometry = new THREE.CylinderGeometry(4, 1, 1, 16);
+                const dishMaterial = new THREE.MeshPhongMaterial({ color: 0x95a5a6 });
+                const dish = new THREE.Mesh(dishGeometry, dishMaterial);
+                dish.position.y = 5;
+                dish.rotation.x = Math.PI / 4;
+                satelliteGroup.add(dish);
+                
+                // Antenna (cylinder)
+                const antennaGeometry = new THREE.CylinderGeometry(0.2, 0.2, 6, 6);
+                const antennaMaterial = new THREE.MeshPhongMaterial({ color: 0x34495e });
+                const antenna = new THREE.Mesh(antennaGeometry, antennaMaterial);
+                antenna.position.y = 8;
+                satelliteGroup.add(antenna);
+                
+                // Thruster (cone)
+                const thrusterGeometry = new THREE.ConeGeometry(1, 3, 8);
+                const thrusterMaterial = new THREE.MeshPhongMaterial({ color: 0xe74c3c });
+                const thruster = new THREE.Mesh(thrusterGeometry, thrusterMaterial);
+                thruster.position.y = -6;
+                thruster.rotation.x = Math.PI;
+                satelliteGroup.add(thruster);
+                
+                // Position randomly
+                satelliteGroup.position.set(
+                    (Math.random() - 0.5) * 2500,
+                    (Math.random() - 0.5) * 1200,
+                    (Math.random() - 0.5) * 2500
+                );
+                
+                satelliteGroup.userData = {
+                    explorationSpeed: Math.random() * 1 + 0.5,
+                    target: new THREE.Vector3(
+                        (Math.random() - 0.5) * 3000,
+                        (Math.random() - 0.5) * 1500,
+                        (Math.random() - 0.5) * 3000
+                    ),
+                    rotationSpeed: Math.random() * 0.05 + 0.02
+                };
+                
+                scene.add(satelliteGroup);
+                satellites.push(satelliteGroup);
+            }
+            
+            return satellites;
+        }
+        function createSatellites() {
+            const satellites = [];
+            
+            for (let i = 0; i < 15; i++) {
+                const satelliteGroup = new THREE.Group();
+                
+                // Satellite body
+                const bodyGeometry = new THREE.BoxGeometry(2, 1, 1);
+                const bodyMaterial = new THREE.MeshPhongMaterial({ color: 0xcccccc });
+                const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+                
+                // Solar panels
+                const panelGeometry = new THREE.BoxGeometry(0.1, 3, 1.5);
+                const panelMaterial = new THREE.MeshPhongMaterial({ color: 0x1a1a2e });
+                
+                const panel1 = new THREE.Mesh(panelGeometry, panelMaterial);
+                panel1.position.x = 1.5;
+                const panel2 = new THREE.Mesh(panelGeometry, panelMaterial);
+                panel2.position.x = -1.5;
+                
+                satelliteGroup.add(body, panel1, panel2);
+                
+                // Position randomly around space
+                satelliteGroup.position.set(
+                    (Math.random() - 0.5) * 2000,
+                    (Math.random() - 0.5) * 1000,
+                    (Math.random() - 0.5) * 2000
+                );
+                
+                satelliteGroup.userData = {
+                    orbitSpeed: Math.random() * 0.02 + 0.01,
+                    orbitRadius: Math.random() * 100 + 50,
+                    orbitCenter: satelliteGroup.position.clone()
+                };
+                
+                scene.add(satelliteGroup);
+                satellites.push(satelliteGroup);
+            }
+            
+            return satellites;
+        }
+
+        // Create stellar evolution system - star birth and death
+        function createStellarEvolution() {
+            const stellarGroup = new THREE.Group();
+            const stars = [];
+            const explosions = [];
+            const particleStars = []; // For cascade explosion particles
+            
+            // Create initial stars in different lifecycle stages
+            for (let i = 0; i < 15; i++) {
+                const star = createStar();
+                star.position.set(
+                    -2000 + Math.random() * 800, // Left side positioning
+                    (Math.random() - 0.5) * 1000,
+                    (Math.random() - 0.5) * 1200
+                );
+                
+                stellarGroup.add(star);
+                stars.push(star);
+            }
+            
+            // Create special large white star for cascade destruction
+            const megaStar = createMegaStar();
+            megaStar.position.set(-1800, 0, -400);
+            stellarGroup.add(megaStar);
+            
+            // Create star formation nebula
+            const nebulaGeometry = new THREE.BufferGeometry();
+            const nebulaCount = 500;
+            const positions = new Float32Array(nebulaCount * 3);
+            const colors = new Float32Array(nebulaCount * 3);
+            
+            for (let i = 0; i < nebulaCount * 3; i += 3) {
+                positions[i] = -2200 + Math.random() * 1000;
+                positions[i + 1] = (Math.random() - 0.5) * 800;
+                positions[i + 2] = (Math.random() - 0.5) * 1000;
+                
+                const color = new THREE.Color();
+                color.setHSL(0.7 + Math.random() * 0.2, 0.8, 0.3 + Math.random() * 0.4);
+                colors[i] = color.r;
+                colors[i + 1] = color.g;
+                colors[i + 2] = color.b;
+            }
+            
+            nebulaGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            nebulaGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            
+            const nebulaMaterial = new THREE.PointsMaterial({
+                size: 4,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.6
+            });
+            
+            const nebula = new THREE.Points(nebulaGeometry, nebulaMaterial);
+            stellarGroup.add(nebula);
+            
+            stellarGroup.userData = {
+                stars: stars,
+                explosions: explosions,
+                particleStars: particleStars,
+                megaStar: megaStar,
+                nebula: nebula,
+                starCreationTimer: 0,
+                starDestructionTimer: 0,
+                cascadeTimer: 0
+            };
+            
+            scene.add(stellarGroup);
+            return stellarGroup;
+        }
+
+        // Create large white mega star for cascade destruction
+        function createMegaStar() {
+            const starGroup = new THREE.Group();
+            
+            // Main mega star body - much larger
+            const starGeometry = new THREE.SphereGeometry(25, 20, 20);
+            const starMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0xffffff,
+                transparent: true,
+                opacity: 1
+            });
+            const star = new THREE.Mesh(starGeometry, starMaterial);
+            starGroup.add(star);
+            
+            // Multiple corona layers for mega effect
+            for (let layer = 0; layer < 3; layer++) {
+                const coronaGeometry = new THREE.SphereGeometry(25 * (1.3 + layer * 0.3), 20, 20);
+                const coronaMaterial = new THREE.MeshBasicMaterial({
+                    color: 0xaaffff,
+                    transparent: true,
+                    opacity: 0.3 - layer * 0.1
+                });
+                const corona = new THREE.Mesh(coronaGeometry, coronaMaterial);
+                starGroup.add(corona);
+            }
+            
+            // Massive flare system
+            const flareGeometry = new THREE.BufferGeometry();
+            const flareCount = 100;
+            const flarePositions = new Float32Array(flareCount * 3);
+            const flareColors = new Float32Array(flareCount * 3);
+            
+            for (let i = 0; i < flareCount * 3; i += 3) {
+                const radius = 25 * (1.2 + Math.random() * 1.5);
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.random() * Math.PI;
+                
+                flarePositions[i] = radius * Math.sin(phi) * Math.cos(theta);
+                flarePositions[i + 1] = radius * Math.sin(phi) * Math.sin(theta);
+                flarePositions[i + 2] = radius * Math.cos(phi);
+                
+                const color = new THREE.Color(0xffffff);
+                flareColors[i] = color.r;
+                flareColors[i + 1] = color.g;
+                flareColors[i + 2] = color.b;
+            }
+            
+            flareGeometry.setAttribute('position', new THREE.BufferAttribute(flarePositions, 3));
+            flareGeometry.setAttribute('color', new THREE.BufferAttribute(flareColors, 3));
+            
+            const flareMaterial = new THREE.PointsMaterial({
+                size: 5,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.8
+            });
+            
+            const flares = new THREE.Points(flareGeometry, flareMaterial);
+            starGroup.add(flares);
+            
+            starGroup.userData = {
+                type: 'mega_white',
+                age: 0,
+                maxLife: 800, // Will explode after this time
+                size: 25,
+                color: 0xffffff,
+                pulsationPhase: 0,
+                flares: flares,
+                instability: 0
+            };
+            
+            return starGroup;
+        }
+
+        // Create particle star from cascade explosion
+        function createParticleStar(position, generation = 1, size = 3) {
+            const starGroup = new THREE.Group();
+            
+            // Particle star body
+            const starGeometry = new THREE.SphereGeometry(size, 12, 12);
+            const starMaterial = new THREE.MeshBasicMaterial({ 
+                color: generation === 1 ? 0xffaaaa : 0xaaaaff,
+                transparent: true,
+                opacity: 0.9
+            });
+            const star = new THREE.Mesh(starGeometry, starMaterial);
+            starGroup.add(star);
+            
+            // Small corona
+            const coronaGeometry = new THREE.SphereGeometry(size * 1.2, 12, 12);
+            const coronaMaterial = new THREE.MeshBasicMaterial({
+                color: generation === 1 ? 0xff6666 : 0x6666ff,
+                transparent: true,
+                opacity: 0.4
+            });
+            const corona = new THREE.Mesh(coronaGeometry, coronaMaterial);
+            starGroup.add(corona);
+            
+            starGroup.position.copy(position);
+            
+            // Random velocity for spreading out
+            const velocity = new THREE.Vector3(
+                (Math.random() - 0.5) * 10,
+                (Math.random() - 0.5) * 10,
+                (Math.random() - 0.5) * 10
+            );
+            
+            starGroup.userData = {
+                type: 'particle',
+                generation: generation,
+                age: 0,
+                maxLife: 400 - generation * 100, // Shorter life for higher generations
+                size: size,
+                velocity: velocity,
+                pulsationPhase: Math.random() * Math.PI * 2,
+                fadeStartAge: 200 - generation * 50 // Start fading earlier for older generations
+            };
+            
+            return starGroup;
+        }
+
+        // Create massive cascade explosion
+        function createMegaExplosion(position) {
+            const explosionGroup = new THREE.Group();
+            
+            // Massive central explosion
+            const explosionGeometry = new THREE.SphereGeometry(5, 20, 20);
+            const explosionMaterial = new THREE.MeshBasicMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 1
+            });
+            const explosion = new THREE.Mesh(explosionGeometry, explosionMaterial);
+            explosionGroup.add(explosion);
+            
+            // Multiple explosion rings
+            for (let ring = 0; ring < 3; ring++) {
+                const ringGeometry = new THREE.RingGeometry(20 + ring * 15, 25 + ring * 15, 32);
+                const ringMaterial = new THREE.MeshBasicMaterial({
+                    color: 0xffffff,
+                    transparent: true,
+                    opacity: 0.6 - ring * 0.2,
+                    side: THREE.DoubleSide
+                });
+                const explosionRing = new THREE.Mesh(ringGeometry, ringMaterial);
+                explosionRing.rotation.x = Math.random() * Math.PI;
+                explosionRing.rotation.y = Math.random() * Math.PI;
+                explosionGroup.add(explosionRing);
+            }
+            
+            explosionGroup.position.copy(position);
+            explosionGroup.userData = {
+                age: 0,
+                maxAge: 150,
+                rings: explosionGroup.children.slice(1) // Store rings for animation
+            };
+            
+            return explosionGroup;
+        }
+
+        // Create individual star with lifecycle properties
+        function createStar() {
+            const starGroup = new THREE.Group();
+            
+            // Random star type and size
+            const starTypes = [
+                { size: 8, color: 0xffaa00, life: 1000, type: 'yellow' },
+                { size: 12, color: 0xff4444, life: 800, type: 'red_giant' },
+                { size: 6, color: 0xaaaaff, life: 1500, type: 'blue' },
+                { size: 15, color: 0xff6600, life: 600, type: 'red_supergiant' },
+                { size: 4, color: 0xffffff, life: 2000, type: 'white_dwarf' }
+            ];
+            
+            const starType = starTypes[Math.floor(Math.random() * starTypes.length)];
+            
+            // Main star body
+            const starGeometry = new THREE.SphereGeometry(starType.size, 16, 16);
+            const starMaterial = new THREE.MeshBasicMaterial({ 
+                color: starType.color,
+                transparent: true,
+                opacity: 0.9
+            });
+            const star = new THREE.Mesh(starGeometry, starMaterial);
+            starGroup.add(star);
+            
+            // Star corona
+            const coronaGeometry = new THREE.SphereGeometry(starType.size * 1.3, 16, 16);
+            const coronaMaterial = new THREE.MeshBasicMaterial({
+                color: starType.color,
+                transparent: true,
+                opacity: 0.3
+            });
+            const corona = new THREE.Mesh(coronaGeometry, coronaMaterial);
+            starGroup.add(corona);
+            
+            // Star flare particles
+            const flareGeometry = new THREE.BufferGeometry();
+            const flareCount = 30;
+            const flarePositions = new Float32Array(flareCount * 3);
+            const flareColors = new Float32Array(flareCount * 3);
+            
+            for (let i = 0; i < flareCount * 3; i += 3) {
+                const radius = starType.size * (1.2 + Math.random() * 0.8);
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.random() * Math.PI;
+                
+                flarePositions[i] = radius * Math.sin(phi) * Math.cos(theta);
+                flarePositions[i + 1] = radius * Math.sin(phi) * Math.sin(theta);
+                flarePositions[i + 2] = radius * Math.cos(phi);
+                
+                const color = new THREE.Color(starType.color);
+                flareColors[i] = color.r;
+                flareColors[i + 1] = color.g;
+                flareColors[i + 2] = color.b;
+            }
+            
+            flareGeometry.setAttribute('position', new THREE.BufferAttribute(flarePositions, 3));
+            flareGeometry.setAttribute('color', new THREE.BufferAttribute(flareColors, 3));
+            
+            const flareMaterial = new THREE.PointsMaterial({
+                size: 3,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.7
+            });
+            
+            const flares = new THREE.Points(flareGeometry, flareMaterial);
+            starGroup.add(flares);
+            
+            starGroup.userData = {
+                type: starType.type,
+                age: Math.random() * starType.life,
+                maxLife: starType.life,
+                size: starType.size,
+                color: starType.color,
+                pulsationPhase: Math.random() * Math.PI * 2,
+                flares: flares
+            };
+            
+            return starGroup;
+        }
+
+        // Create supernova explosion effect
+        function createSupernova(position) {
+            const explosionGroup = new THREE.Group();
+            
+            // Central explosion
+            const explosionGeometry = new THREE.SphereGeometry(1, 16, 16);
+            const explosionMaterial = new THREE.MeshBasicMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 1
+            });
+            const explosion = new THREE.Mesh(explosionGeometry, explosionMaterial);
+            explosionGroup.add(explosion);
+            
+            // Explosion particles
+            const particleGeometry = new THREE.BufferGeometry();
+            const particleCount = 200;
+            const positions = new Float32Array(particleCount * 3);
+            const velocities = new Float32Array(particleCount * 3);
+            const colors = new Float32Array(particleCount * 3);
+            
+            for (let i = 0; i < particleCount * 3; i += 3) {
+                positions[i] = 0;
+                positions[i + 1] = 0;
+                positions[i + 2] = 0;
+                
+                const velocity = (Math.random() + 0.5) * 15;
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.random() * Math.PI;
+                
+                velocities[i] = velocity * Math.sin(phi) * Math.cos(theta);
+                velocities[i + 1] = velocity * Math.sin(phi) * Math.sin(theta);
+                velocities[i + 2] = velocity * Math.cos(phi);
+                
+                const color = new THREE.Color();
+                color.setHSL(Math.random() * 0.3, 1, 0.5 + Math.random() * 0.5);
+                colors[i] = color.r;
+                colors[i + 1] = color.g;
+                colors[i + 2] = color.b;
+            }
+            
+            particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            particleGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            
+            const particleMaterial = new THREE.PointsMaterial({
+                size: 4,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.8
+            });
+            
+            const particles = new THREE.Points(particleGeometry, particleMaterial);
+            explosionGroup.add(particles);
+            
+            explosionGroup.position.copy(position);
+            explosionGroup.userData = {
+                age: 0,
+                maxAge: 300,
+                velocities: velocities,
+                particles: particles,
+                explosion: explosion
+            };
+            
+            return explosionGroup;
+        }
+        function createGalaxy() {
+            const galaxyGroup = new THREE.Group();
+            
+            // Spiral arms
+            for (let arm = 0; arm < 4; arm++) {
+                const spiralGeometry = new THREE.BufferGeometry();
+                const spiralCount = 2000;
+                const positions = new Float32Array(spiralCount * 3);
+                const colors = new Float32Array(spiralCount * 3);
+                
+                for (let i = 0; i < spiralCount; i++) {
+                    const angle = (i / spiralCount) * Math.PI * 8 + (arm * Math.PI / 2);
+                    const radius = (i / spiralCount) * 1500 + 200;
+                    
+                    positions[i * 3] = Math.cos(angle) * radius;
+                    positions[i * 3 + 1] = (Math.random() - 0.5) * 50;
+                    positions[i * 3 + 2] = Math.sin(angle) * radius;
+                    
+                    const color = new THREE.Color();
+                    color.setHSL(0.6 + Math.random() * 0.2, 0.8, 0.6);
+                    colors[i * 3] = color.r;
+                    colors[i * 3 + 1] = color.g;
+                    colors[i * 3 + 2] = color.b;
+                }
+                
+                spiralGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                spiralGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+                
+                const spiralMaterial = new THREE.PointsMaterial({
+                    size: 3,
+                    vertexColors: true,
+                    transparent: true,
+                    opacity: 0.6
+                });
+                
+                const spiral = new THREE.Points(spiralGeometry, spiralMaterial);
+                galaxyGroup.add(spiral);
+            }
+            
+            galaxyGroup.position.set(-1500, -500, -2000);
+            galaxyGroup.rotation.x = Math.PI / 6;
+            scene.add(galaxyGroup);
+            
+            return galaxyGroup;
+        }
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.4);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        directionalLight.position.set(1, 1, 1);
+        directionalLight.castShadow = true;
+        scene.add(directionalLight);
+
+        // Create all objects
+        createStarfield();
+        rocket = createRocket();
+        const sun = createSun();
+        const earth = createEarth();
+        const planets = createSolarSystemPlanets();
+        const roboticHumans = createRoboticHumans();
+        const advancedSatellites = createAdvancedSatellites();
+        const celestialObjects = createAdditionalCelestialObjects();
+        const satellites = createSatellites();
+        const stellarEvolution = createStellarEvolution();
+        const galaxy = createGalaxy();
+
+        // Scroll speed control
+        document.addEventListener('wheel', (event) => {
+            cameraSpeed += event.deltaY * 0.00001;
+            cameraSpeed = Math.max(0.0005, Math.min(0.005, cameraSpeed));
+        });
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            cameraTime += cameraSpeed;
+            rocketTime += 0.02;
+            
+            // Animate Sun
+            if (sun) {
+                sun.rotation.y += sun.userData.rotationSpeed;
+                
+                // Animate solar flares
+                const flares = sun.userData.flares;
+                if (flares && flares.geometry && flares.geometry.attributes.position) {
+                    const positions = flares.geometry.attributes.position.array;
+                    for (let i = 0; i < positions.length; i += 3) {
+                        const time = Date.now() * 0.001;
+                        const radius = 85 + Math.sin(time + i) * 20;
+                        const length = Math.sqrt(positions[i] * positions[i] + positions[i + 1] * positions[i + 1] + positions[i + 2] * positions[i + 2]);
+                        if (length > 0) {
+                            positions[i] = (positions[i] / length) * radius;
+                            positions[i + 1] = (positions[i + 1] / length) * radius;
+                            positions[i + 2] = (positions[i + 2] / length) * radius;
+                        }
+                    }
+                    flares.geometry.attributes.position.needsUpdate = true;
+                }
+            }
+            
+            // Rocket animation
+            if (rocket) {
+                // Rocket movement when launched
+                if (rocketLaunched) {
+                    rocket.position.y += 2;
+                    rocket.position.x = Math.sin(rocketTime * 0.5) * 50;
+                    rocket.position.z = 100 + Math.cos(rocketTime * 0.3) * 30;
+                }
+                
+                // Animate flames
+                if (rocketEngineOn) {
+                    rocketFlames.forEach((flame, index) => {
+                        if (flame.geometry && flame.geometry.attributes.position) {
+                            // Animate particle flames
+                            const positions = flame.geometry.attributes.position.array;
+                            for (let i = 1; i < positions.length; i += 3) {
+                                positions[i] -= 0.5; // Move particles down
+                                if (positions[i] < -25) { // Adjusted for smaller rocket
+                                    positions[i] = -15; // Reset position
+                                }
+                            }
+                            flame.geometry.attributes.position.needsUpdate = true;
+                        } else {
+                            // Animate cone flames
+                            flame.scale.y = 0.8 + Math.sin(Date.now() * 0.01 + index) * 0.3;
+                            flame.scale.x = 0.8 + Math.cos(Date.now() * 0.015 + index) * 0.2;
+                            flame.scale.z = 0.8 + Math.cos(Date.now() * 0.015 + index) * 0.2;
+                        }
+                    });
+                }
+                
+                // Slight rocket rotation
+                rocket.rotation.z = Math.sin(rocketTime * 0.5) * 0.1;
+            }
+            
+            // Enhanced dynamic camera movement
+            if (followingRocket && rocket) {
+                // Follow the rocket
+                const offset = new THREE.Vector3(50, 30, 50);
+                camera.position.copy(rocket.position).add(offset);
+                camera.lookAt(rocket.position);
+            } else {
+                // Cycle through different camera modes
+                cameraTransition += 0.001;
+                
+                if (cameraTransition > 15) { // Change mode every 15 seconds
+                    cameraMode = (cameraMode + 1) % 4;
+                    cameraTransition = 0;
+                    
+                    // Set focus targets for different modes
+                    if (cameraMode === 1 && galaxy) focusTarget = galaxy;
+                    else if (cameraMode === 2 && sun) focusTarget = sun;
+                    else if (cameraMode === 3 && planets.length > 0) focusTarget = planets[Math.floor(Math.random() * planets.length)];
+                    else focusTarget = null;
+                }
+                
+                switch (cameraMode) {
+                    case 0: // Exploration mode - wide sweeping movement
+                        const explorationRadius = 400 + Math.sin(cameraTime * 0.3) * 200;
+                        const explorationHeight = 150 + Math.cos(cameraTime * 0.7) * 100;
+                        
+                        camera.position.x = Math.sin(cameraTime) * explorationRadius + Math.cos(cameraTime * 0.4) * 300;
+                        camera.position.y = Math.sin(cameraTime * 0.6) * explorationHeight + Math.cos(cameraTime * 0.8) * 80;
+                        camera.position.z = Math.cos(cameraTime) * explorationRadius + Math.sin(cameraTime * 0.5) * 400;
+                        
+                        const lookTarget = new THREE.Vector3(
+                            Math.sin(cameraTime * 0.2) * 50,
+                            Math.cos(cameraTime * 0.3) * 30,
+                            Math.sin(cameraTime * 0.4) * 100
+                        );
+                        camera.lookAt(lookTarget);
+                        break;
+                        
+                    case 1: // Galaxy focus mode
+                        if (focusTarget) {
+                            const galaxyDistance = 800 + Math.sin(cameraTime * 0.5) * 400;
+                            const galaxyAngle = cameraTime * 0.3;
+                            
+                            camera.position.x = focusTarget.position.x + Math.cos(galaxyAngle) * galaxyDistance;
+                            camera.position.y = focusTarget.position.y + Math.sin(cameraTime * 0.4) * 300;
+                            camera.position.z = focusTarget.position.z + Math.sin(galaxyAngle) * galaxyDistance;
+                            
+                            camera.lookAt(focusTarget.position);
+                        }
+                        break;
+                        
+                    case 2: // Sun focus mode - close orbital
+                        if (focusTarget) {
+                            const sunDistance = 200 + Math.sin(cameraTime) * 100;
+                            const sunAngle = cameraTime * 0.8;
+                            
+                            camera.position.x = focusTarget.position.x + Math.cos(sunAngle) * sunDistance;
+                            camera.position.y = focusTarget.position.y + Math.sin(sunAngle * 0.3) * 150;
+                            camera.position.z = focusTarget.position.z + Math.sin(sunAngle) * sunDistance;
+                            
+                            camera.lookAt(focusTarget.position);
+                        }
+                        break;
+                        
+                    case 3: // Planet chase mode
+                        if (focusTarget) {
+                            const planetDistance = 100 + Math.sin(cameraTime * 2) * 50;
+                            const chaseAngle = cameraTime * 1.5;
+                            
+                            camera.position.x = focusTarget.position.x + Math.cos(chaseAngle) * planetDistance;
+                            camera.position.y = focusTarget.position.y + Math.sin(chaseAngle * 0.5) * 80;
+                            camera.position.z = focusTarget.position.z + Math.sin(chaseAngle) * planetDistance;
+                            
+                            camera.lookAt(focusTarget.position);
+                        }
+                        break;
+                }
+            }
+            
+            // Animate planets orbiting around the sun with oblique motion
+            planets.forEach(planet => {
+                // Planet rotation on its axis
+                planet.rotation.y += planet.userData.rotationSpeed;
+                planet.rotation.x += planet.userData.rotationSpeed * 0.1;
+                
+                // Oblique orbital motion around the sun
+                const data = planet.userData;
+                data.orbitAngle += data.orbitSpeed;
+                
+                // Calculate new position in oblique orbit around sun
+                const orbitX = data.orbitCenter.x + Math.cos(data.orbitAngle) * data.orbitRadius;
+                const orbitY = data.orbitCenter.y + Math.sin(data.orbitAngle * data.orbitTiltX) * 150; // Oblique height variation
+                const orbitZ = data.orbitCenter.z + Math.sin(data.orbitAngle) * data.orbitRadius * Math.cos(data.orbitTiltZ);
+                
+                planet.position.set(orbitX, orbitY, orbitZ);
+                
+                // Dynamic size changes for special planets
+                if (data.isDynamic) {
+                    data.sizePhase += 0.05;
+                    const sizeMultiplier = 0.8 + Math.sin(data.sizePhase) * 0.4;
+                    const newSize = data.originalSize * sizeMultiplier;
+                    
+                    // Update the planet's scale
+                    planet.scale.setScalar(sizeMultiplier);
+                }
+                
+                // Animate moons around planets
+                planet.children.forEach(child => {
+                    if (child.userData && child.userData.orbitSpeed) {
+                        child.rotation.y += child.userData.orbitSpeed;
+                    }
+                });
+            });
+            
+            // Animate Earth orbiting around the sun
+            if (earth.userData) {
+                // Earth rotation on its axis
+                earth.rotation.y += 0.005;
+                
+                // Earth orbital motion around sun
+                const data = earth.userData;
+                data.orbitAngle += data.orbitSpeed;
+                
+                const orbitX = data.orbitCenter.x + Math.cos(data.orbitAngle) * data.orbitRadius;
+                const orbitY = data.orbitCenter.y;
+                const orbitZ = data.orbitCenter.z + Math.sin(data.orbitAngle) * data.orbitRadius;
+                
+                earth.position.set(orbitX, orbitY, orbitZ);
+                
+                // Moon orbiting around Earth
+                earth.children[1].position.x = Math.cos(Date.now() * 0.001) * 60;
+                earth.children[1].position.z = Math.sin(Date.now() * 0.001) * 60;
+            }
+            
+            // Animate 2 groups of 3 robotic humans moving together
+            if (roboticHumans && roboticHumans.length > 0) {
+                roboticHumans.forEach((humanGroupData, groupIndex) => {
+                    const groupData = humanGroupData.group.userData;
+                    
+                    // Move the entire group together
+                    humanGroupData.group.position.add(groupData.velocity);
+                    
+                    // Gentle group rotation to simulate floating
+                    humanGroupData.group.rotation.y += groupData.rotationSpeed;
+                    
+                    // Individual subtle animations for each person
+                    humanGroupData.individuals.forEach((person, index) => {
+                        // Slight bobbing motion for each person
+                        person.position.y = Math.sin(Date.now() * 0.002 + index + groupIndex * Math.PI) * 5;
+                        
+                        // Gentle arm movement to show they're alive
+                        if (person.children[2]) { // Left arm
+                            person.children[2].rotation.z = Math.PI / 4 + Math.sin(Date.now() * 0.003 + index + groupIndex) * 0.1;
+                        }
+                        if (person.children[3]) { // Right arm
+                            person.children[3].rotation.z = -Math.PI / 4 - Math.sin(Date.now() * 0.003 + index + groupIndex) * 0.1;
+                        }
+                    });
+                    
+                    // Boundary wrapping - when they go too far, bring them back
+                    if (humanGroupData.group.position.length() > 2500) {
+                        humanGroupData.group.position.multiplyScalar(-0.3);
+                        groupData.velocity.multiplyScalar(-1); // Reverse direction
+                    }
+                });
+            }
+            
+            // Animate advanced exploration satellites
+            advancedSatellites.forEach(satellite => {
+                const data = satellite.userData;
+                
+                // Move towards exploration target
+                const direction = data.target.clone().sub(satellite.position).normalize();
+                satellite.position.add(direction.multiplyScalar(data.explorationSpeed));
+                
+                // Rotate satellite
+                satellite.rotation.y += data.rotationSpeed;
+                
+                // Rotate solar panels
+                if (satellite.children[1]) satellite.children[1].rotation.y += 0.02;
+                if (satellite.children[2]) satellite.children[2].rotation.y -= 0.02;
+                
+                // When close to target, pick new target
+                if (satellite.position.distanceTo(data.target) < 50) {
+                    data.target.set(
+                        (Math.random() - 0.5) * 3000,
+                        (Math.random() - 0.5) * 1500,
+                        (Math.random() - 0.5) * 3000
+                    );
+                }
+            });
+            
+            // Animate celestial objects
+            celestialObjects.forEach(obj => {
+                if (obj.userData.orbitSpeed) {
+                    // Asteroids
+                    obj.rotation.x += obj.userData.rotationSpeed;
+                    obj.rotation.y += obj.userData.rotationSpeed;
+                } else if (obj.userData.velocity) {
+                    // Comets
+                    obj.position.add(obj.userData.velocity);
+                    
+                    // Wrap around boundaries
+                    if (obj.position.length() > 3000) {
+                        obj.position.multiplyScalar(-0.5);
+                    }
+                }
+            });
+            
+            // Animate satellites
+            satellites.forEach(satellite => {
+                const time = Date.now() * 0.001;
+                const data = satellite.userData;
+                satellite.position.x = data.orbitCenter.x + Math.cos(time * data.orbitSpeed) * data.orbitRadius;
+                satellite.position.z = data.orbitCenter.z + Math.sin(time * data.orbitSpeed) * data.orbitRadius;
+                satellite.rotation.y += 0.02;
+            });
+            
+            // Animate stellar evolution system
+            if (stellarEvolution) {
+                const stellarData = stellarEvolution.userData;
+                
+                // Animate mega star with increasing instability
+                if (stellarData.megaStar) {
+                    const megaData = stellarData.megaStar.userData;
+                    megaData.age += 1;
+                    megaData.pulsationPhase += 0.1;
+                    megaData.instability += 0.02;
+                    
+                    // Increasing instability as it approaches destruction
+                    const ageRatio = megaData.age / megaData.maxLife;
+                    const instabilityScale = 1 + Math.sin(megaData.pulsationPhase) * (0.1 + ageRatio * 0.4);
+                    stellarData.megaStar.scale.setScalar(instabilityScale);
+                    
+                    // Color becomes more unstable (flickering)
+                    if (ageRatio > 0.7) {
+                        const flicker = Math.sin(megaData.pulsationPhase * 3) * 0.3;
+                        stellarData.megaStar.children[0].material.opacity = 0.7 + flicker;
+                    }
+                    
+                    // Animate mega star flares with increasing violence
+                    if (megaData.flares && megaData.flares.geometry.attributes.position) {
+                        const positions = megaData.flares.geometry.attributes.position.array;
+                        for (let i = 0; i < positions.length; i += 3) {
+                            const time = Date.now() * 0.002;
+                            const radius = megaData.size * (1.2 + Math.sin(time + i) * (0.5 + ageRatio));
+                            const length = Math.sqrt(positions[i] * positions[i] + positions[i + 1] * positions[i + 1] + positions[i + 2] * positions[i + 2]);
+                            if (length > 0) {
+                                positions[i] = (positions[i] / length) * radius;
+                                positions[i + 1] = (positions[i + 1] / length) * radius;
+                                positions[i + 2] = (positions[i + 2] / length) * radius;
+                            }
+                        }
+                        megaData.flares.geometry.attributes.position.needsUpdate = true;
+                    }
+                    
+                    // Mega star destruction and cascade creation
+                    if (megaData.age > megaData.maxLife) {
+                        // Create mega explosion
+                        const megaExplosion = createMegaExplosion(stellarData.megaStar.position);
+                        stellarEvolution.add(megaExplosion);
+                        stellarData.explosions.push(megaExplosion);
+                        
+                        // Create first generation particle stars
+                        const numParticles = 12;
+                        for (let i = 0; i < numParticles; i++) {
+                            const particleStar = createParticleStar(
+                                stellarData.megaStar.position.clone(),
+                                1, // First generation
+                                4 // Size
+                            );
+                            stellarEvolution.add(particleStar);
+                            stellarData.particleStars.push(particleStar);
+                        }
+                        
+                        // Remove mega star and create new one for next cycle
+                        stellarEvolution.remove(stellarData.megaStar);
+                        const newMegaStar = createMegaStar();
+                        newMegaStar.position.set(-1800, 0, -400);
+                        stellarEvolution.add(newMegaStar);
+                        stellarData.megaStar = newMegaStar;
+                    }
+                }
+                
+                // Animate particle stars and cascade destruction
+                stellarData.particleStars.forEach((particleStar, index) => {
+                    const particleData = particleStar.userData;
+                    particleData.age += 1;
+                    particleData.pulsationPhase += 0.08;
+                    
+                    // Move particle stars
+                    particleStar.position.add(particleData.velocity);
+                    particleData.velocity.multiplyScalar(0.99); // Gradual deceleration
+                    
+                    // Pulsation
+                    const pulsation = 1 + Math.sin(particleData.pulsationPhase) * 0.2;
+                    particleStar.scale.setScalar(pulsation);
+                    
+                    // Fade older generation particles to maintain balance
+                    if (particleData.age > particleData.fadeStartAge) {
+                        const fadeRatio = (particleData.age - particleData.fadeStartAge) / (particleData.maxLife - particleData.fadeStartAge);
+                        particleStar.children[0].material.opacity = 0.9 * (1 - fadeRatio);
+                        particleStar.children[1].material.opacity = 0.4 * (1 - fadeRatio);
+                    }
+                    
+                    // Particle star destruction with chance of cascade
+                    if (particleData.age > particleData.maxLife) {
+                        // Remove this particle star
+                        stellarEvolution.remove(particleStar);
+                        stellarData.particleStars.splice(index, 1);
+                        
+                        // Chance to create smaller particles (cascade effect)
+                        if (particleData.generation < 3 && Math.random() < 0.4) {
+                            const numSecondaryParticles = 3 + Math.floor(Math.random() * 3);
+                            for (let i = 0; i < numSecondaryParticles; i++) {
+                                const secondaryParticle = createParticleStar(
+                                    particleStar.position.clone(),
+                                    particleData.generation + 1,
+                                    Math.max(1, particleData.size * 0.6)
+                                );
+                                stellarEvolution.add(secondaryParticle);
+                                stellarData.particleStars.push(secondaryParticle);
+                            }
+                        }
+                    }
+                });
+                
+                // Limit total particle stars to prevent overwhelming the scene
+                if (stellarData.particleStars.length > 50) {
+                    // Remove oldest particles
+                    const particlesToRemove = stellarData.particleStars.splice(0, stellarData.particleStars.length - 50);
+                    particlesToRemove.forEach(particle => {
+                        stellarEvolution.remove(particle);
+                    });
+                }
+                
+                // Animate existing stars
+                stellarData.stars.forEach((star, index) => {
+                    const starData = star.userData;
+                    starData.age += 1;
+                    starData.pulsationPhase += 0.05;
+                    
+                    // Star pulsation based on age and type
+                    const pulsation = 1 + Math.sin(starData.pulsationPhase) * 0.1;
+                    star.scale.setScalar(pulsation);
+                    
+                    // Aging effects - stars get redder and bigger as they age
+                    const ageRatio = starData.age / starData.maxLife;
+                    if (ageRatio > 0.7) {
+                        // Star is getting old, becoming redder
+                        const redShift = Math.min(ageRatio - 0.7, 0.3) * 3;
+                        star.children[0].material.color.setHSL(0.1 - redShift * 0.1, 0.8, 0.6);
+                        star.scale.multiplyScalar(1 + redShift);
+                    }
+                    
+                    // Animate star flares
+                    if (starData.flares && starData.flares.geometry.attributes.position) {
+                        const positions = starData.flares.geometry.attributes.position.array;
+                        for (let i = 0; i < positions.length; i += 3) {
+                            const time = Date.now() * 0.001;
+                            const radius = starData.size * (1.2 + Math.sin(time + i) * 0.3);
+                            const length = Math.sqrt(positions[i] * positions[i] + positions[i + 1] * positions[i + 1] + positions[i + 2] * positions[i + 2]);
+                            if (length > 0) {
+                                positions[i] = (positions[i] / length) * radius;
+                                positions[i + 1] = (positions[i + 1] / length) * radius;
+                                positions[i + 2] = (positions[i + 2] / length) * radius;
+                            }
+                        }
+                        starData.flares.geometry.attributes.position.needsUpdate = true;
+                    }
+                    
+                    // Check if star should die
+                    if (starData.age > starData.maxLife) {
+                        // Create supernova explosion
+                        const explosion = createSupernova(star.position);
+                        stellarEvolution.add(explosion);
+                        stellarData.explosions.push(explosion);
+                        
+                        // Remove the star
+                        stellarEvolution.remove(star);
+                        stellarData.stars.splice(index, 1);
+                    }
+                });
+                
+                // Animate explosions
+                stellarData.explosions.forEach((explosion, index) => {
+                    const explosionData = explosion.userData;
+                    explosionData.age += 1;
+                    
+                    // Animate mega explosions differently
+                    if (explosionData.rings) {
+                        // Mega explosion animation
+                        const scale = explosionData.age / 30;
+                        explosion.children[0].scale.setScalar(scale);
+                        
+                        explosionData.rings.forEach((ring, ringIndex) => {
+                            ring.scale.setScalar(scale * (1 + ringIndex * 0.2));
+                            ring.rotation.z += 0.02;
+                        });
+                    } else {
+                        // Regular explosion animation
+                        const scale = explosionData.age / 50;
+                        explosion.userData.explosion.scale.setScalar(scale);
+                        
+                        // Animate explosion particles
+                        if (explosionData.particles && explosionData.particles.geometry.attributes.position) {
+                            const positions = explosionData.particles.geometry.attributes.position.array;
+                            const velocities = explosionData.velocities;
+                            
+                            for (let i = 0; i < positions.length; i += 3) {
+                                positions[i] += velocities[i];
+                                positions[i + 1] += velocities[i + 1];
+                                positions[i + 2] += velocities[i + 2];
+                                
+                                // Add some deceleration
+                                velocities[i] *= 0.995;
+                                velocities[i + 1] *= 0.995;
+                                velocities[i + 2] *= 0.995;
+                            }
+                            explosionData.particles.geometry.attributes.position.needsUpdate = true;
+                        }
+                    }
+                    
+                    // Fade out explosion
+                    const fadeRatio = explosionData.age / explosionData.maxAge;
+                    if (explosion.children[0]) {
+                        explosion.children[0].material.opacity = 1 - fadeRatio;
+                    }
+                    
+                    // Remove old explosions
+                    if (explosionData.age > explosionData.maxAge) {
+                        stellarEvolution.remove(explosion);
+                        stellarData.explosions.splice(index, 1);
+                    }
+                });
+                
+                // Create new stars periodically
+                stellarData.starCreationTimer += 1;
+                if (stellarData.starCreationTimer > 200) { // Create new star every ~3 seconds
+                    const newStar = createStar();
+                    newStar.position.set(
+                        -2000 + Math.random() * 800,
+                        (Math.random() - 0.5) * 1000,
+                        (Math.random() - 0.5) * 1200
+                    );
+                    
+                    // Start new stars small and grow them
+                    newStar.scale.setScalar(0.1);
+                    newStar.userData.growing = true;
+                    newStar.userData.growthPhase = 0;
+                    
+                    stellarEvolution.add(newStar);
+                    stellarData.stars.push(newStar);
+                    stellarData.starCreationTimer = 0;
+                }
+                
+                // Animate star birth (growing new stars)
+                stellarData.stars.forEach(star => {
+                    if (star.userData.growing) {
+                        star.userData.growthPhase += 0.02;
+                        const growthScale = Math.min(star.userData.growthPhase, 1);
+                        star.scale.setScalar(growthScale);
+                        
+                        if (star.userData.growthPhase >= 1) {
+                            star.userData.growing = false;
+                        }
+                    }
+                });
+                
+                // Animate nebula
+                if (stellarData.nebula && stellarData.nebula.geometry.attributes.position) {
+                    const positions = stellarData.nebula.geometry.attributes.position.array;
+                    for (let i = 0; i < positions.length; i += 3) {
+                        positions[i + 1] += Math.sin(Date.now() * 0.001 + i) * 0.1;
+                    }
+                    stellarData.nebula.geometry.attributes.position.needsUpdate = true;
+                }
+            }
+            
+            // Rotate galaxy
+            galaxy.rotation.y += 0.0005;
+            
+            renderer.render(scene, camera);
+        }
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Start animation
+        animate();
+    </script>
+</body>
+</html>
