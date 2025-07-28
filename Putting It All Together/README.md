@@ -92,3 +92,7 @@ An interactive 3D demo featuring multiple RGB cubes bouncing between two white p
       ├── CheckeredTriangles.cpp   # Part 1: static checkerboard
       ├── ColorCubeFlyby.cpp       # Part 2: interactive cube demo
       └── README.md                # this file
+## License
+
+This project is open source. Feel free to use and modify.
+
