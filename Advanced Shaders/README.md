@@ -116,16 +116,7 @@ Position 1.0:  Red (1,0,0)
 4. Push to branch (`git push origin feature/new-effect`)
 5. Create Pull Request
 
-## License
-
-This project is licensed under the MIT License - see LICENSE file for details.
-
 ## Acknowledgments
-
-- Unity Technologies for Shader Graph
-- Graphics programming community
 - WebGL/OpenGL shader tutorials and resources
 
----
 
-**Next Steps:** Check out [DOCUMENTATION.md](DOCUMENTATION.md) for detailed technical implementation details and mathematical foundations.
